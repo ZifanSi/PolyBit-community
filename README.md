@@ -83,4 +83,16 @@ sh scripts/security/install-hooks.sh
 pytest
 ```
 
+## Papers
+
+What the design leans on.
+
+- [Bitcoin: A Peer-to-Peer Electronic Cash System](https://bitcoin.org/bitcoin.pdf) (2008): append-only history, Merkle roots, hash-linked blocks
+- [BOINC: A System for Public-Resource Computing and Storage](https://boinc.berkeley.edu/grid_paper_04.pdf) (2004): putting idle machines to work, trusting untrusted workers
+- [Gavel: Heterogeneity-Aware Cluster Scheduling for Deep Learning](https://www.usenix.org/system/files/osdi20-narayanan_deepak.pdf) (OSDI '20): fair scheduling across mixed GPUs
+- [Optimizing Resource Allocation in Hyperscale Datacenters](https://www.usenix.org/system/files/osdi24-kumar.pdf) (OSDI '24): matching jobs to machines at scale
+- [Totoro: A Scalable Federated Learning Engine for the Edge](https://dl.acm.org/doi/10.1145/3627703.3629575) (EuroSys '24): ML across many small, flaky devices
+- [Serverless in the Wild](https://www.usenix.org/system/files/atc20-shahrad.pdf) (ATC '20): what real job traffic looks like
+- [Efficient Large-Scale Language Model Training on GPU Clusters Using Megatron-LM](https://arxiv.org/abs/2104.04473) (SC '21): what big-GPU renters run
+
 [SECURITY.md](SECURITY.md)
