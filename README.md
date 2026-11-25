@@ -36,6 +36,8 @@ This repo is the node: bot + ledger. Rigs and the GPU market plug in as extensio
 docker compose up -d
 ```
 
+`PB_API_PORT=9100` serves `/healthz` and Prometheus `/metrics` on localhost.
+
 ## Backup
 
 ```sh

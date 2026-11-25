@@ -10,7 +10,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from polybit import extensions
-from polybit.bot import ui
+from polybit.bot import metrics, ui
 from polybit.bot.ratelimit import PolyBitTree, RateLimiter, SlowDown
 from polybit.config import Settings
 from polybit.db import create_pool
@@ -44,6 +44,8 @@ class PolyBitBot(commands.Bot):
         # Extensions add routes here in setup(bot). Served only if PB_API_PORT is set.
         self.http_app = web.Application(client_max_size=HTTP_MAX_BODY)
         self.http_app.router.add_get("/healthz", _health)
+        self.http_app[metrics.BOT] = self
+        self.http_app.router.add_get("/metrics", metrics.handle)
         self._http_runner: web.AppRunner | None = None
 
     async def setup_hook(self) -> None:
