@@ -29,7 +29,7 @@ find_gitleaks() {
 # Files that must never be tracked, as an extended regex over repo-relative paths.
 SENSITIVE_PATHS='(^|/)private/|(^|/)\.gitleaks\.local\.toml$|(^|/)\.env$|(^|/)\.env\.|(^|/)[^/]*\.env$|(^|/)\.devdb/|(^|/)rules/|(^|/)secrets/|(^|/)\.claude/|\.(pem|key|crt|p12|pfx|jks|db|sqlite|sqlite3|dump|backup|log)$|\.sql\.gz$|(^|/)id_(rsa|ed25519)|credentials[^/]*\.json$|service-account[^/]*\.json$|(^|/)(docker-)?compose\.override\.ya?ml$'
 
-# Reads paths on stdin, prints the sensitive ones (allowing the .env.example template).
+# Reads paths on stdin, prints the sensitive ones. No exceptions: every .env* file is blocked.
 filter_sensitive() {
-  grep -E "$SENSITIVE_PATHS" | grep -vE '(^|/)\.env\.example$' || true
+  grep -E "$SENSITIVE_PATHS" || true
 }

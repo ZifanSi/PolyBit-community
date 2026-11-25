@@ -78,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         settings = Settings.from_env()
         settings.validate(require_token=args.command == "run")
     except ConfigError as exc:
-        print(f"Bad config: {exc} (see .env.example)", file=sys.stderr)
+        print(f"Bad config: {exc} (see polybit/config.py)", file=sys.stderr)
         return 2
 
     if args.command == "migrate":

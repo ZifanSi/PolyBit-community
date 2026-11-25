@@ -30,7 +30,7 @@ This repo is the node: bot + ledger. Rigs and the GPU market plug in as extensio
 ## Run a node
 
 ```sh
-cp .env.example .env    # bot token, admin IDs
+# .env: PB_DISCORD_TOKEN, PB_ADMIN_IDS, PB_DB_PASSWORD (all settings in polybit/config.py)
 docker compose up -d
 ```
 

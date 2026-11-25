@@ -23,10 +23,7 @@ Everything is **fail-closed**: if a check fails or can't run, the commit/push is
    sh scripts/security/install-hooks.sh
    ```
    This sets `git config core.hooksPath .githooks`.
-3. Copy the env template and fill it in locally. It is gitignored:
-   ```sh
-   cp .env.example .env
-   ```
+3. Create `.env` locally (gitignored). Settings are listed in `polybit/config.py`.
 
 ## What gets blocked
 
@@ -34,7 +31,7 @@ Everything is **fail-closed**: if a check fails or can't run, the commit/push is
 - Database passwords, including passwords inside connection strings
 - Filled-in `PB_DISCORD_TOKEN`, `PB_DB_PASSWORD`, `POSTGRES_PASSWORD` values
 - Everything in gitleaks' default rule set (API keys, private keys, cloud credentials …)
-- Sensitive files: `.env*` (except `.env.example`), `.devdb/`, `rules/`, keys and
+- Sensitive files: `.env*`, `.devdb/`, `rules/`, keys and
   certificates, database dumps and backups, `*.log`, compose override files
 
 Rules live in [`.gitleaks.toml`](.gitleaks.toml); blocked paths in
@@ -73,7 +70,6 @@ Always use `--redact` so secret values never appear in your terminal or logs.
 ## Handling dev credentials
 
 - Secrets live only in `.env` (local) or your host's secret store (production).
-- `.env.example` holds placeholders only. CI fails if a real value appears there.
 - Tests use synthetic data: small fake IDs like `1`, `2`, `3`, never real Discord IDs.
 - Use a separate bot token and database for development and production.
 - Don't paste `.env` contents, tokens or logs with IDs into issues or chat.
