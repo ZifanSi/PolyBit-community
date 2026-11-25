@@ -36,6 +36,13 @@ This repo is the node: bot + ledger. Rigs and the GPU market plug in as extensio
 docker compose up -d
 ```
 
+## Backup
+
+```sh
+sh scripts/backup.sh                              # -> backups/*.dump, never committed
+sh scripts/restore.sh backups/<file>.dump --yes   # wipes, restores, audits
+```
+
 ## Wallet
 
 `/getbalance` `/send` `/sendmany` `/mine` `/leaderboard` `/getinfo` `/pbadmin`
