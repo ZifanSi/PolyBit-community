@@ -13,7 +13,7 @@ from typing import Sequence
 
 import asyncpg
 
-from polybit import ledger
+from polybit import chain, ledger
 from polybit.config import Settings
 from polybit.errors import (
     AccountFrozen,
@@ -593,6 +593,8 @@ class Economy:
                     tampered += 1
                     if tampered <= 20:
                         problems.append(f"Journal {r['id']} doesn't match its hash (edited after the fact).")
+
+            problems += await chain.audit_blocks(conn)
 
             entries = await conn.fetchval("SELECT COUNT(*) FROM journal")
             accounts = await conn.fetchval("SELECT COUNT(*) FROM accounts")

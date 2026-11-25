@@ -51,10 +51,12 @@ class PolyBitBot(commands.Bot):
         self.economy = Economy(self.pool, self.settings, extensions.build_policy(modules, self.settings))
 
         from polybit.bot.cogs.admin import AdminCog
+        from polybit.bot.cogs.chain import ChainCog
         from polybit.bot.cogs.wallet import WalletCog
 
         await self.add_cog(WalletCog(self))
         await self.add_cog(AdminCog(self))
+        await self.add_cog(ChainCog(self))
         await extensions.setup_all(self, modules)
         await self._start_http()
         self.tree.on_error = self.on_app_command_error

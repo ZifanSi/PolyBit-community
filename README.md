@@ -23,6 +23,7 @@
 | Mining | GPU compute + daily `/mine` |
 | Settlement | double-entry, append-only, balanced in the DB |
 | Integrity | every tx SHA-256 hashed, `polybit audit` recomputes all |
+| Blocks | every 10 min, Merkle root, linked to the previous block |
 | Supply | minted on rewards, burnable, fully auditable |
 | Network | Discord slash commands |
 
@@ -38,6 +39,8 @@ docker compose up -d
 ## Wallet
 
 `/getbalance` `/send` `/sendmany` `/mine` `/leaderboard` `/getinfo` `/pbadmin`
+
+`/block` `/verify` check any tx against the chain yourself.
 
 ## Audit
 

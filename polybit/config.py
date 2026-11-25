@@ -64,6 +64,8 @@ class Settings:
     # HTTP server for extensions that add routes. Localhost only; put HTTPS in front. 0 = off.
     api_host: str = "127.0.0.1"
     api_port: int = 0
+    # Seal new ledger entries into a block this often. 0 = never (no blocks).
+    block_minutes: float = 10.0
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -100,6 +102,7 @@ class Settings:
             extensions=read("PB_EXTENSIONS", _str_tuple, d.extensions),
             api_host=env.get("PB_API_HOST", d.api_host),
             api_port=read("PB_API_PORT", int, d.api_port),
+            block_minutes=read("PB_BLOCK_MINUTES", float, d.block_minutes),
         )
         if problems:
             raise ConfigError("; ".join(problems))
@@ -129,6 +132,7 @@ class Settings:
         for name in self.extensions:
             check(bool(MODULE_RE.match(name)), f"PB_EXTENSIONS: {name!r} isn't a module path")
         check(0 <= self.api_port <= 65535, "PB_API_PORT must be 0-65535")
+        check(self.block_minutes >= 0, "PB_BLOCK_MINUTES can't be negative")
 
         if problems:
             raise ConfigError("; ".join(problems))

@@ -5,6 +5,7 @@ Discord rejects bad command definitions at sync time; this catches them first.
 
 from polybit.bot.client import PolyBitBot
 from polybit.bot.cogs.admin import AdminCog
+from polybit.bot.cogs.chain import ChainCog
 from polybit.bot.cogs.wallet import WalletCog
 from polybit.config import Settings
 
@@ -23,6 +24,7 @@ async def _command_names():
     bot = PolyBitBot(Settings())
     await bot.add_cog(WalletCog(bot))
     await bot.add_cog(AdminCog(bot))
+    await bot.add_cog(ChainCog(bot))
     return set(_walk(bot.tree.get_commands()))
 
 
@@ -37,6 +39,8 @@ async def test_command_tree():
         "mine",
         "getinfo",
         "leaderboard",
+        "block",
+        "verify",
         "pbadmin mint",
         "pbadmin burn",
         "pbadmin freeze",
