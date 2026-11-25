@@ -62,6 +62,8 @@ def policy(settings):              # your rules, see polybit/policy.py
 
 async def setup(bot):              # cogs, routes on bot.http_app
     await bot.add_cog(MyCog(bot))
+
+# selling something? bot.economy.hold / release / refund (escrow)
 ```
 
 ## Dev

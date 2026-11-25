@@ -18,6 +18,9 @@ KIND_LABELS = {
     "grant": "Minted by admin",
     "revoke": "Burned by admin",
     "treasury": "Treasury payout",
+    "escrow-hold": "Held in escrow",
+    "escrow-release": "Escrow payout",
+    "escrow-refund": "Escrow refund",
 }
 
 SYSTEM_LABELS = {

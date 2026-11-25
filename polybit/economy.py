@@ -531,6 +531,79 @@ class Economy:
                 raise InvalidTransfer(f"The treasury only holds {format_amount(exc.available)}.") from None
             return await conn.fetchval("SELECT balance FROM accounts WHERE id = $1", treasury)
 
+    # ------------------------------------------------------------------ escrow
+    # Building blocks for extensions that sell something: hold the buyer's PB while the
+    # work runs, then pay it out or hand it back. They run inside the caller's transaction
+    # (pass its connection) so they commit or roll back together with the extension's rows.
+
+    async def hold(
+        self,
+        conn: asyncpg.Connection,
+        user_id: int,
+        amount: int,
+        *,
+        kind: str = "escrow-hold",
+        memo: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> int:
+        """Move PB from the user's wallet into escrow. Returns the journal id."""
+        _validate_amount(amount)
+        wallet = await self.ensure_wallet(conn, user_id)
+        await self.require_not_frozen(conn, user_id)
+        escrow = await self.system_account(conn, ledger.SYSTEM_ESCROW)
+        result = await ledger.post(
+            conn,
+            kind=kind,
+            legs=[(wallet, -amount), (escrow, amount)],
+            memo=_clean_memo(memo),
+            actor_id=user_id,
+            idempotency_key=idempotency_key,
+        )
+        return result.journal_id
+
+    async def release(
+        self,
+        conn: asyncpg.Connection,
+        user_id: int,
+        amount: int,
+        *,
+        fee: int = 0,
+        kind: str = "escrow-release",
+        memo: str | None = None,
+        actor_id: int | None = None,
+        idempotency_key: str | None = None,
+    ) -> int:
+        """Pay `amount` out of escrow to the user, with `fee` of it going to the treasury."""
+        _validate_amount(amount)
+        if not 0 <= fee <= amount:
+            raise AmountError("Fee must be between zero and the amount.")
+        escrow = await self.system_account(conn, ledger.SYSTEM_ESCROW)
+        wallet = await self.ensure_wallet(conn, user_id)
+        legs = [(escrow, -amount), (wallet, amount - fee)]
+        if fee:
+            legs.append((await self.system_account(conn, ledger.SYSTEM_TREASURY), fee))
+        result = await ledger.post(
+            conn, kind=kind, legs=legs, memo=_clean_memo(memo), actor_id=actor_id,
+            idempotency_key=idempotency_key,
+        )
+        return result.journal_id
+
+    async def refund(
+        self,
+        conn: asyncpg.Connection,
+        user_id: int,
+        amount: int,
+        *,
+        kind: str = "escrow-refund",
+        memo: str | None = None,
+        actor_id: int | None = None,
+        idempotency_key: str | None = None,
+    ) -> int:
+        """Give held PB back to the user, no fee."""
+        return await self.release(
+            conn, user_id, amount, kind=kind, memo=memo, actor_id=actor_id, idempotency_key=idempotency_key
+        )
+
     async def set_frozen(self, actor_id: int, user_id: int, frozen: bool, *, reason: str) -> None:
         self._require_admin(actor_id)
         async with self.pool.acquire() as conn, conn.transaction():
