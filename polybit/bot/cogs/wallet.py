@@ -313,6 +313,8 @@ class WalletCog(commands.Cog):
         embed.add_field(name="To", value="\n".join(_leg_line(l) for l in credits), inline=True)
         if tx.memo:
             embed.add_field(name="Note", value=tx.memo, inline=False)
+        if tx.hash is not None:
+            embed.add_field(name="Hash", value=f"`{tx.hash.hex()}`", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     # ------------------------------------------------------------------- mine

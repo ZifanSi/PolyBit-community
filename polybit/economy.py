@@ -74,6 +74,7 @@ class Transaction:
     actor_id: int | None
     created_at: datetime
     legs: list[TxLeg]
+    hash: bytes | None = None  # None for entries written before hashing existed
 
 
 @dataclass(frozen=True)
@@ -262,7 +263,7 @@ class Economy:
         for anyone else it is reported as not found."""
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT id, kind, memo, actor_id, created_at FROM journal WHERE id = $1",
+                "SELECT id, kind, memo, actor_id, created_at, hash FROM journal WHERE id = $1",
                 journal_id,
             )
             if row is None:
@@ -286,6 +287,7 @@ class Economy:
             actor_id=row["actor_id"],
             created_at=row["created_at"],
             legs=[TxLeg(owner_id=l["owner_id"], system_name=l["name"], amount=l["amount"]) for l in legs],
+            hash=bytes(row["hash"]) if row["hash"] is not None else None,
         )
 
     async def leaderboard(self, guild_id: int, *, limit: int = 10) -> list[tuple[int, int]]:
@@ -583,6 +585,14 @@ class Economy:
             )
             for r in negative:
                 problems.append(f"Account {r['id']} is negative ({r['balance']}).")
+
+            # Recompute every entry hash: catches edits made behind the app's back.
+            tampered = 0
+            async for r in conn.cursor(ledger.ENTRY_QUERY + " WHERE j.hash IS NOT NULL GROUP BY j.id ORDER BY j.id"):
+                if ledger.recompute(r) != bytes(r["hash"]):
+                    tampered += 1
+                    if tampered <= 20:
+                        problems.append(f"Journal {r['id']} doesn't match its hash (edited after the fact).")
 
             entries = await conn.fetchval("SELECT COUNT(*) FROM journal")
             accounts = await conn.fetchval("SELECT COUNT(*) FROM accounts")

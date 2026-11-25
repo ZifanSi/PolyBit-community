@@ -311,7 +311,9 @@ async def test_db_rejects_unbalanced_entry(pool):
         mint = await conn.fetchval("SELECT id FROM accounts WHERE name = 'mint'")
         with pytest.raises(asyncpg.RaiseError, match="unbalanced"):
             async with conn.transaction():
-                jid = await conn.fetchval("INSERT INTO journal (kind) VALUES ('hack') RETURNING id")
+                jid = await conn.fetchval(
+                    "INSERT INTO journal (kind, hash) VALUES ('hack', $1) RETURNING id", bytes(32)
+                )
                 await conn.execute(
                     "INSERT INTO postings (journal_id, account_id, amount) VALUES ($1, $2, -5)",
                     jid, mint,

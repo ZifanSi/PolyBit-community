@@ -22,6 +22,7 @@
 |---|---|
 | Mining | GPU compute + daily `/mine` |
 | Settlement | double-entry, append-only, balanced in the DB |
+| Integrity | every tx SHA-256 hashed, `polybit audit` recomputes all |
 | Supply | minted on rewards, burnable, fully auditable |
 | Network | Discord slash commands |
 
