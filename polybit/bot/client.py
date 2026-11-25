@@ -11,6 +11,7 @@ from discord.ext import commands
 
 from polybit import extensions
 from polybit.bot import ui
+from polybit.bot.ratelimit import PolyBitTree, RateLimiter, SlowDown
 from polybit.config import Settings
 from polybit.db import create_pool
 from polybit.economy import Economy
@@ -33,8 +34,11 @@ class PolyBitBot(commands.Bot):
             intents=discord.Intents.default(),
             help_command=None,
             allowed_mentions=discord.AllowedMentions.none(),
+            tree_cls=PolyBitTree,
         )
         self.settings = settings
+        limit = settings.rate_limit_per_minute
+        self.rate_limiter = RateLimiter(limit) if limit else None
         self.pool = None
         self.economy: Economy | None = None
         # Extensions add routes here in setup(bot). Served only if PB_API_PORT is set.
@@ -95,6 +99,8 @@ class PolyBitBot(commands.Bot):
         original = getattr(error, "original", error)
         if isinstance(original, PolyBitError):
             embed = ui.error_embed(original.message)
+        elif isinstance(error, SlowDown):
+            embed = ui.error_embed(str(error))
         elif isinstance(error, app_commands.CheckFailure):
             embed = ui.error_embed("You can't use this command here.")
         else:

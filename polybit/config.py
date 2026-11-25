@@ -68,6 +68,8 @@ class Settings:
     block_minutes: float = 10.0
     # Post every new block's hash here: a public record nobody can quietly rewrite. Empty = off.
     block_channel_id: int | None = None
+    # Most slash commands one user may run per minute (admins exempt). 0 = no limit.
+    rate_limit_per_minute: int = 20
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -106,6 +108,7 @@ class Settings:
             api_port=read("PB_API_PORT", int, d.api_port),
             block_minutes=read("PB_BLOCK_MINUTES", float, d.block_minutes),
             block_channel_id=read("PB_BLOCK_CHANNEL_ID", _opt_int, d.block_channel_id),
+            rate_limit_per_minute=read("PB_RATE_LIMIT_PER_MINUTE", int, d.rate_limit_per_minute),
         )
         if problems:
             raise ConfigError("; ".join(problems))
@@ -136,6 +139,7 @@ class Settings:
             check(bool(MODULE_RE.match(name)), f"PB_EXTENSIONS: {name!r} isn't a module path")
         check(0 <= self.api_port <= 65535, "PB_API_PORT must be 0-65535")
         check(self.block_minutes >= 0, "PB_BLOCK_MINUTES can't be negative")
+        check(self.rate_limit_per_minute >= 0, "PB_RATE_LIMIT_PER_MINUTE can't be negative")
 
         if problems:
             raise ConfigError("; ".join(problems))
