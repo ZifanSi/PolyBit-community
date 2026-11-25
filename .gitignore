@@ -39,6 +39,9 @@ compose.override.yml
 
 # Personal workflow notes and assistant settings (not part of the project)
 rules/
+# Private code and local-only secret rules. Never public.
+private/
+.gitleaks.local.toml
 .claude/
 CLAUDE.local.md
 

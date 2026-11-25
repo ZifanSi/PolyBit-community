@@ -11,7 +11,7 @@ cd "$root" || block "cannot enter repository root"
 [ -f .gitleaks.toml ] || block ".gitleaks.toml is missing"
 [ -f .gitignore ] || block ".gitignore is missing"
 
-for entry in '.env' '.devdb/' 'rules/' '*.pem' '*.key' '*.log'; do
+for entry in '.env' '.devdb/' 'rules/' 'private/' '.gitleaks.local.toml' '*.pem' '*.key' '*.log'; do
   grep -qxF "$entry" .gitignore || block ".gitignore no longer ignores $entry"
 done
 

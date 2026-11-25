@@ -22,9 +22,13 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
   sh "$root/scripts/security/check-files.sh" --tree "$local_sha" || exit 1
 
-  "$GITLEAKS" git --log-opts="$range" --redact --verbose --no-banner --no-color --ignore-gitleaks-allow \
-    --config "$root/.gitleaks.toml" --exit-code 1 "$root" \
-    || block "gitleaks found a possible secret in commits for $remote_ref (value hidden above)"
+  # Shared rules (check-config makes sure they exist), plus local-only extra rules if present.
+  for config in "$root/.gitleaks.toml" "$root/.gitleaks.local.toml"; do
+    [ -f "$config" ] || continue
+    "$GITLEAKS" git --log-opts="$range" --redact --verbose --no-banner --no-color --ignore-gitleaks-allow \
+      --config "$config" --exit-code 1 "$root" \
+      || block "gitleaks found a possible secret in commits for $remote_ref (value hidden above)"
+  done
 done
 
 echo "pre-push: security checks passed"
