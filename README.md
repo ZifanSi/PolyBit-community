@@ -23,7 +23,7 @@
 | Mining | GPU compute + daily `/mine` |
 | Settlement | double-entry, append-only, balanced in the DB |
 | Integrity | every tx SHA-256 hashed, `polybit audit` recomputes all |
-| Blocks | every 10 min, Merkle root, linked to the previous block |
+| Blocks | every 10 min, Merkle root, linked to the previous block, hash posted to a channel |
 | Supply | minted on rewards, burnable, fully auditable |
 | Network | Discord slash commands |
 

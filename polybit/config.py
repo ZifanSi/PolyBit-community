@@ -66,6 +66,8 @@ class Settings:
     api_port: int = 0
     # Seal new ledger entries into a block this often. 0 = never (no blocks).
     block_minutes: float = 10.0
+    # Post every new block's hash here: a public record nobody can quietly rewrite. Empty = off.
+    block_channel_id: int | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -103,6 +105,7 @@ class Settings:
             api_host=env.get("PB_API_HOST", d.api_host),
             api_port=read("PB_API_PORT", int, d.api_port),
             block_minutes=read("PB_BLOCK_MINUTES", float, d.block_minutes),
+            block_channel_id=read("PB_BLOCK_CHANNEL_ID", _opt_int, d.block_channel_id),
         )
         if problems:
             raise ConfigError("; ".join(problems))

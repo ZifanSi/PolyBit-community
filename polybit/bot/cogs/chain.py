@@ -55,7 +55,16 @@ class ChainCog(commands.Cog):
         self.sealer.cancel()
 
     async def on_block(self, block: chain.Block) -> None:
-        """Called after each new block. Hook for announcements."""
+        """Post the new block to the announcement channel, if one is set."""
+        channel_id = self.bot.settings.block_channel_id
+        if not channel_id:
+            return
+        try:
+            channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
+            await channel.send(embed=block_embed(block, title=f"⛓️ Block #{block.height} sealed"))
+        except Exception:
+            # A missing channel or permission must never stop the sealer.
+            log.exception("Couldn't announce block #%d in channel %s", block.height, channel_id)
 
     @tasks.loop(minutes=10)
     async def sealer(self) -> None:
