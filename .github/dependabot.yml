@@ -1,0 +1,17 @@
+# Weekly update PRs for pinned GitHub Actions (keeps SHA pins current) and Python deps.
+# Every Dependabot PR still runs the security workflow before it can be merged.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build

@@ -1,0 +1,43 @@
+# Gitleaks configuration for PolyBit.
+# Starts from the built-in rule set and adds rules for what this project handles:
+# Discord bot tokens, real Discord IDs, and database passwords.
+# Changing this file weakens or strengthens every scan: review such changes carefully.
+
+title = "PolyBit secret scanning"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "discord-bot-token"
+description = "Discord bot token"
+regex = '''\b[MNO][A-Za-z0-9_-]{23,27}\.[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,40}\b'''
+tags = ["discord", "token"]
+
+[[rules]]
+id = "discord-snowflake-id"
+description = "Real Discord user/server ID (17-20 digits). Tests must use small fake IDs."
+regex = '''\b[1-9][0-9]{16,19}\b'''
+tags = ["discord", "pii"]
+
+[[rules]]
+id = "postgres-dsn-password"
+description = "PostgreSQL connection string with an embedded password"
+regex = '''(?i)postgres(?:ql)?://[^:/\s@]+:([^@\s]+)@'''
+secretGroup = 1
+tags = ["database", "password"]
+
+  [[rules.allowlists]]
+  description = "Documented placeholders and env-var references, not real passwords"
+  regexTarget = "secret"
+  regexes = [
+    '''^(polybit|CHANGE_ME|postgres)$''',
+    '''^\$\{''',
+  ]
+
+[[rules]]
+id = "polybit-env-secret"
+description = "Filled-in secret from a PolyBit .env file"
+regex = '''(?i)\b(PB_DISCORD_TOKEN|PB_DB_PASSWORD|POSTGRES_PASSWORD)\s*[=:]\s*['"]?([^\s#'"$]{6,})'''
+secretGroup = 2
+tags = ["env", "password", "token"]

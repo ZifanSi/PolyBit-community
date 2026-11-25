@@ -1,0 +1,16 @@
+#!/bin/sh
+# Fail-closed secret scan of the staged changes. Installed by scripts/security/install-hooks.sh.
+
+set -u
+root=$(git rev-parse --show-toplevel)
+. "$root/scripts/security/lib.sh"
+
+sh "$root/scripts/security/check-config.sh" || exit 1
+sh "$root/scripts/security/check-files.sh" --staged || exit 1
+
+find_gitleaks
+"$GITLEAKS" git --pre-commit --staged --redact --verbose --no-banner --no-color --ignore-gitleaks-allow \
+  --config "$root/.gitleaks.toml" --exit-code 1 "$root" \
+  || block "gitleaks found a possible secret in the staged changes (value hidden above)"
+
+echo "pre-commit: security checks passed"

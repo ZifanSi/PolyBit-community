@@ -1,0 +1,68 @@
+# ---------------------------------------------------------------------------
+# Secrets and private data: never commit these.
+# ---------------------------------------------------------------------------
+
+# Environment files hold the bot token, admin IDs, server IDs and DB passwords.
+# Only the placeholder template is shared.
+.env
+.env.*
+*.env
+!.env.example
+
+# Keys, certificates and credential files
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+id_rsa*
+id_ed25519*
+secrets/
+credentials*.json
+service-account*.json
+
+# Local database (real wallets, balances and Discord user IDs) and its logs
+.devdb/
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.sql.gz
+*.backup
+backups/
+*.log
+
+# Local Docker overrides may contain real passwords
+docker-compose.override.yml
+compose.override.yml
+
+# Personal workflow notes and assistant settings (not part of the project)
+rules/
+.claude/
+CLAUDE.local.md
+
+# ---------------------------------------------------------------------------
+# Build output, caches and environments
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Editors and OS files
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
