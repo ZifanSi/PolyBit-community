@@ -10,8 +10,14 @@
   <img src="https://img.shields.io/badge/license-MIT-5865F2?style=flat-square&labelColor=0d1117" alt="MIT">
 </p>
 
-Discord bot with its own coin, PB. Every transfer is a balanced journal entry,
-append-only, checked by the database. Plug the rest in as extensions.
+GPU sitting idle? Let it mine PB. Spend PB on GPUs you don't own.
+Runs in Discord. Every PB is on a double-entry ledger, nothing gets edited, only appended.
+
+<p align="center">
+  <img src=".github/flow.svg" alt="RTX 3070 mines PB, PB rents an H200" width="720">
+</p>
+
+This repo is the bot + ledger. Mining and the GPU market plug in as extensions.
 
 ```
 $ polybit audit
