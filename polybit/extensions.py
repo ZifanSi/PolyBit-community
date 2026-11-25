@@ -46,6 +46,10 @@ async def migrate_all(pool: asyncpg.Pool, modules: list[ModuleType]) -> list[str
 
 
 def build_policy(modules: list[ModuleType], settings: Settings) -> Policy:
+    for m in modules:
+        # A submodule named "policy" replaces the function once imported. Fail closed, not open.
+        if hasattr(m, "policy") and not callable(m.policy):
+            raise ExtensionError(f"{m.__name__}.policy must be a function (is a submodule shadowing it?)")
     providers = [m for m in modules if callable(getattr(m, "policy", None))]
     if len(providers) > 1:
         names = ", ".join(m.__name__ for m in providers)

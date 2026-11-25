@@ -38,6 +38,13 @@ def test_only_one_policy_provider_allowed():
         extensions.build_policy([a, b], Settings())
 
 
+def test_shadowed_policy_fails_closed():
+    ext = types.ModuleType("ext")
+    ext.policy = types.ModuleType("ext.policy")  # what importing a submodule named policy does
+    with pytest.raises(extensions.ExtensionError, match="must be a function"):
+        extensions.build_policy([ext], Settings())
+
+
 def test_policy_must_be_a_policy():
     bad = types.ModuleType("bad")
     bad.policy = lambda settings: object()
