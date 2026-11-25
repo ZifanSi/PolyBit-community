@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: polybit
+      # Set PB_DB_PASSWORD in .env (never committed). Compose refuses to start without it.
+      POSTGRES_PASSWORD: ${PB_DB_PASSWORD:?Set PB_DB_PASSWORD in .env}
+      POSTGRES_DB: polybit
+    volumes:
+      - polybit-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U polybit -d polybit"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  bot:
+    build: .
+    env_file: .env
+    environment:
+      PB_DATABASE_URL: postgresql://polybit:${PB_DB_PASSWORD:?Set PB_DB_PASSWORD in .env}@db:5432/polybit
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  polybit-db:

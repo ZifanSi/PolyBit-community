@@ -1,0 +1,18 @@
+# Keep secrets and local data out of the Docker build context.
+.env
+.env.*
+!.env.example
+.devdb/
+rules/
+.claude/
+.git/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.vscode/
+.idea/
+*.log
+tests/
