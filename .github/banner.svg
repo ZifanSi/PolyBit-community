@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200" role="img" aria-label="polybit">
+  <rect width="800" height="200" rx="12" fill="#0d1117"/>
+  <g stroke="#0d1117" stroke-width="1.5" stroke-linejoin="round">
+    <g>
+      <polygon points="120,60 155,80 120,100 85,80" fill="#9BE22D"/>
+      <polygon points="85,80 120,100 120,140 85,120" fill="#76B900"/>
+      <polygon points="120,100 155,80 155,120 120,140" fill="#4E7A00"/>
+    </g>
+    <g transform="translate(120,0)">
+      <polygon points="120,60 155,80 120,100 85,80" fill="#8891F7"/>
+      <polygon points="85,80 120,100 120,140 85,120" fill="#5865F2"/>
+      <polygon points="120,100 155,80 155,120 120,140" fill="#3B44B5"/>
+    </g>
+    <g transform="translate(240,0)">
+      <polygon points="120,60 155,80 120,100 85,80" fill="#9BE22D"/>
+      <polygon points="85,80 120,100 120,140 85,120" fill="#76B900"/>
+      <polygon points="120,100 155,80 155,120 120,140" fill="#4E7A00"/>
+    </g>
+  </g>
+  <g fill="none" stroke="#8b949e" stroke-width="3">
+    <rect x="158" y="94" width="26" height="12" rx="6"/>
+    <rect x="176" y="94" width="26" height="12" rx="6"/>
+    <rect x="278" y="94" width="26" height="12" rx="6"/>
+    <rect x="296" y="94" width="26" height="12" rx="6"/>
+  </g>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+    <text x="440" y="72" font-size="14" fill="#5865F2">block #0003 · balanced</text>
+    <text x="436" y="118" font-size="46" font-weight="700" fill="#76B900">polybit</text>
+    <text x="440" y="148" font-size="15" fill="#8b949e">ledger · discord · extensions</text>
+  </g>
+</svg>
