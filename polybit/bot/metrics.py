@@ -3,11 +3,16 @@ so only when PB_API_PORT is set, and on localhost by default."""
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from aiohttp import web
 
 from polybit.money import UNIT
 
-BOT = web.AppKey("polybit_bot")
+if TYPE_CHECKING:
+    from polybit.bot.client import PolyBitBot
+
+BOT: web.AppKey[PolyBitBot] = web.AppKey("polybit_bot")
 
 
 def _pb(units: int) -> str:

@@ -95,7 +95,8 @@ async def setup(bot):              # cogs, routes on bot.http_app
 ```sh
 pip install -e ".[dev]"
 sh scripts/security/install-hooks.sh
-pytest
+ruff check polybit tests scripts && mypy
+pytest --cov                      # needs PB_TEST_DATABASE_URL or pgserver; floor 75%
 ```
 
 ## Papers

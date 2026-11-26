@@ -21,7 +21,10 @@ dependencies = [
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
+    "pytest-cov>=6",
     "pgserver>=0.1.4",
+    "ruff>=0.8",
+    "mypy>=1.13",
 ]
 
 [project.scripts]
@@ -38,3 +41,37 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, isort, bugbear, pyupgrade, async, bandit (security), simplify, ruff
+select = ["E", "F", "W", "I", "B", "UP", "ASYNC", "S", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert, use fake secrets and fixed subprocess calls.
+"tests/**" = ["S101", "S105", "S106", "S311", "S603"]
+# Starts local Postgres binaries with fixed arguments.
+"scripts/dev_run.py" = ["S603"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["polybit"]
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+module = ["asyncpg", "asyncpg.*"]  # ships no type hints
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["polybit"]
+
+[tool.coverage.report]
+# Current total is ~76%. The Discord cogs and CLI are the thin parts; raise this as they get tests.
+fail_under = 75
+show_missing = true
+skip_covered = true

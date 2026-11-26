@@ -65,7 +65,7 @@ class PolyBitBot(commands.Bot):
         await self.add_cog(ChainCog(self))
         await extensions.setup_all(self, modules)
         await self._start_http()
-        self.tree.on_error = self.on_app_command_error
+        self.tree.error(self.on_app_command_error)
 
         if self.settings.dev_guild_id:
             guild = discord.Object(id=self.settings.dev_guild_id)
@@ -85,7 +85,7 @@ class PolyBitBot(commands.Bot):
         log.info("HTTP API on %s:%d", self.settings.api_host, self.settings.api_port)
 
     async def on_ready(self) -> None:
-        log.info("PolyBit online as %s (%s) in %d servers", self.user, self.user.id, len(self.guilds))
+        log.info("PolyBit online as %s in %d servers", self.user, len(self.guilds))
         await self.change_presence(activity=discord.Game(name="/getbalance · /mine · /send"))
 
     async def close(self) -> None:

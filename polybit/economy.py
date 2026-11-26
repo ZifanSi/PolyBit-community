@@ -7,9 +7,9 @@ which keeps the money logic testable and reusable by future components.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Sequence
 
 import asyncpg
 
@@ -331,7 +331,7 @@ class Economy:
             memo=row["memo"],
             actor_id=row["actor_id"],
             created_at=row["created_at"],
-            legs=[TxLeg(owner_id=l["owner_id"], system_name=l["name"], amount=l["amount"]) for l in legs],
+            legs=[TxLeg(owner_id=r["owner_id"], system_name=r["name"], amount=r["amount"]) for r in legs],
             hash=bytes(row["hash"]) if row["hash"] is not None else None,
             signer=bytes(row["signer"]) if row["signer"] is not None else None,
         )

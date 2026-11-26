@@ -1,6 +1,7 @@
 """Self-custody wallets: only the key holder can move the PB."""
 
 import asyncio
+import contextlib
 import dataclasses
 
 import asyncpg
@@ -24,7 +25,10 @@ async def _bind(economy, user_id=ALICE, key=None):
     return key
 
 
-def _tx(key, *, nonce, to=((BOB, pb(5)),), sender=ALICE, fee=0, memo=None):
+FIVE_TO_BOB = ((BOB, pb(5)),)
+
+
+def _tx(key, *, nonce, to=FIVE_TO_BOB, sender=ALICE, fee=0, memo=None):
     return signing.sign(key, signing.transfer_payload(
         chain="polybit", sender_id=sender, payouts=list(to), nonce=nonce, fee=fee, memo=memo,
     ))
@@ -32,7 +36,7 @@ def _tx(key, *, nonce, to=((BOB, pb(5)),), sender=ALICE, fee=0, memo=None):
 
 async def test_signed_transfer_moves_pb(economy, pool):
     key = await _bind(economy)
-    tx, result = await economy.submit(_tx(key, nonce=1, memo="rent"))
+    _, result = await economy.submit(_tx(key, nonce=1, memo="rent"))
     assert (result.amount, result.sender_balance, result.replayed) == (pb(5), pb(95), False)
     assert await economy.balance(BOB) == pb(5)
     assert (await economy.wallet_key(ALICE)).next_nonce == 2
@@ -81,7 +85,7 @@ async def test_replay_and_nonces(economy):
     again = (await economy.submit(token))[1]
     assert again.replayed and again.journal_id == first.journal_id
     assert await economy.balance(BOB) == pb(5)
-    with pytest.raises(InvalidTransfer, match="already used. The next one is 2"):
+    with pytest.raises(InvalidTransfer, match=r"already used\. The next one is 2"):
         await economy.submit(_tx(key, nonce=1, to=[(BOB, pb(1))]))
     with pytest.raises(InvalidTransfer, match="too high"):
         await economy.submit(_tx(key, nonce=3))
@@ -126,7 +130,7 @@ async def test_bind_is_on_the_chain(economy, pool):
 async def test_fee_is_signed_by_the_sender(pool, settings):
     economy = Economy(pool, dataclasses.replace(settings, transfer_fee_bps=100))
     key = await _bind(economy)
-    with pytest.raises(InvalidTransfer, match="fee of at least 0.1 PB"):
+    with pytest.raises(InvalidTransfer, match=r"fee of at least 0\.1 PB"):
         await economy.submit(_tx(key, nonce=1, to=[(BOB, pb(10))]))
     _, result = await economy.submit(_tx(key, nonce=1, to=[(BOB, pb(10))], fee=pb("0.2")))
     assert result.fee == pb("0.2") and result.sender_balance == pb("89.8")
@@ -156,10 +160,8 @@ async def test_bind_racing_payments_leaves_a_clean_ledger(economy):
     proof = signing.sign(key, signing.bind_payload(chain="polybit", user_id=ALICE, pubkey=signing.public_bytes(key)))
 
     async def pay():
-        try:
+        with contextlib.suppress(SelfCustody):
             await economy.pay(ALICE, BOB, pb(1))
-        except SelfCustody:
-            pass
 
     await asyncio.gather(*[pay() for _ in range(10)], economy.bind_key(ALICE, proof), *[pay() for _ in range(10)])
     report = await economy.audit()

@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, TypeVar
+from typing import TypeVar
 
 from polybit.errors import AmountError
 from polybit.money import pb

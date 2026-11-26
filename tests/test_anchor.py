@@ -1,6 +1,7 @@
 """Anchoring against a fake EVM JSON-RPC node that decodes and checks every raw transaction."""
 
 import dataclasses
+from datetime import UTC
 
 import asyncpg
 import pytest
@@ -235,11 +236,11 @@ def test_new_key_cli(capsys):
 
 
 def test_anchor_line_links_to_explorer():
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from polybit.bot.cogs.chain import _anchor_line
 
     a = anchor.Anchor(1, 3, bytes(32), SEPOLIA, "0x" + "0" * 40, b"\xcd" * 32, "confirmed", 9,
-                      datetime.now(timezone.utc), None)
+                      datetime.now(UTC), None)
     assert "https://sepolia.basescan.org/tx/0x" + "cd" * 32 in _anchor_line(Settings(), a)
     assert "not anchored" in _anchor_line(Settings(), None)

@@ -19,9 +19,9 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Iterable
+from datetime import UTC, datetime
 
 import asyncpg
 
@@ -60,7 +60,7 @@ def entry_hash(
     body: dict = {
         "v": 1,
         "id": journal_id,
-        "at": created_at.astimezone(timezone.utc).isoformat(timespec="microseconds"),
+        "at": created_at.astimezone(UTC).isoformat(timespec="microseconds"),
         "kind": kind,
         "memo": memo,
         "actor": actor_id,
@@ -68,7 +68,7 @@ def entry_hash(
         "key": idempotency_key,
         "legs": sorted([int(a), int(amt)] for a, amt in legs),
     }
-    if signature is not None:
+    if signer is not None and signature is not None:
         body.update(v=2, signer=signer.hex(), sig=signature.hex(), payload=payload)
     raw = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(raw.encode("utf-8")).digest()
@@ -93,7 +93,7 @@ def recompute(row: asyncpg.Record) -> bytes:
         actor_id=row["actor_id"],
         guild_id=row["guild_id"],
         idempotency_key=row["idempotency_key"],
-        legs=zip(row["accounts"], row["amounts"]),
+        legs=zip(row["accounts"], row["amounts"], strict=True),
         signer=_bytes(row["signer"]),
         signature=_bytes(row["signature"]),
         payload=row["payload"],
@@ -196,7 +196,7 @@ async def post(
     deltas = [merged[a] for a in account_ids]
     await conn.executemany(
         "INSERT INTO postings (journal_id, account_id, amount) VALUES ($1, $2, $3)",
-        [(journal_id, a, d) for a, d in zip(account_ids, deltas)],
+        [(journal_id, a, d) for a, d in zip(account_ids, deltas, strict=True)],
     )
     await conn.execute(
         """

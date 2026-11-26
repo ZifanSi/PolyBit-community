@@ -1,6 +1,6 @@
 import asyncio
 import random
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import asyncpg
 import pytest
@@ -277,7 +277,7 @@ async def test_get_transaction_visible_to_participants_and_admin_only(economy):
 
     tx = await economy.get_transaction(result.journal_id, viewer_id=BOB)
     assert tx is not None and tx.kind == "transfer" and tx.memo == "thanks"
-    assert [(l.owner_id, l.amount) for l in tx.legs] == [(ALICE, -pb(7)), (BOB, pb(7))]
+    assert [(leg.owner_id, leg.amount) for leg in tx.legs] == [(ALICE, -pb(7)), (BOB, pb(7))]
 
     assert await economy.get_transaction(result.journal_id, viewer_id=ALICE) is not None
     assert await economy.get_transaction(result.journal_id, viewer_id=ADMIN_ID) is not None
@@ -289,7 +289,7 @@ async def test_get_transaction_shows_system_legs(economy):
     await economy.register(ALICE)
     [signup] = await economy.history(ALICE)
     tx = await economy.get_transaction(signup.journal_id, viewer_id=ALICE)
-    assert [(l.system_name, l.owner_id, l.amount) for l in tx.legs] == [
+    assert [(leg.system_name, leg.owner_id, leg.amount) for leg in tx.legs] == [
         ("mint", None, -pb(100)),
         (None, ALICE, pb(100)),
     ]
@@ -404,7 +404,7 @@ class _SmallMintsOnly(Policy):
 
 
 async def test_policy_can_hold_back_rewards(pool, settings):
-    later = datetime.now(timezone.utc) + timedelta(days=1)
+    later = datetime.now(UTC) + timedelta(days=1)
     eco = Economy(pool, settings, _LockedUntil(later))
     assert await eco.register(ALICE) is False  # wallet created, grant held back
     assert await eco.balance(ALICE) == 0

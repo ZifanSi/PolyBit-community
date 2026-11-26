@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import time
 from collections import deque
-from typing import Callable
+from collections.abc import Callable
 
 import discord
 from discord import app_commands
@@ -47,7 +47,8 @@ class RateLimiter:
 class PolyBitTree(app_commands.CommandTree):
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         limiter: RateLimiter | None = getattr(self.client, "rate_limiter", None)
-        if limiter is None or self.client.settings.is_admin(interaction.user.id):
+        settings = getattr(self.client, "settings", None)
+        if limiter is None or (settings is not None and settings.is_admin(interaction.user.id)):
             return True
         wait = limiter.hit(interaction.user.id)
         if wait:

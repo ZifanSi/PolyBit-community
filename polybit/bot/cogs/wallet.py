@@ -13,17 +13,19 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
-from typing import TYPE_CHECKING, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from polybit.bot import ui
-from polybit.economy import MAX_RECIPIENTS
-from polybit.errors import PolyBitError, InvalidTransfer, NotFound
+from polybit.economy import MAX_RECIPIENTS, Economy
+from polybit.errors import InvalidTransfer, NotFound, PolyBitError
 from polybit.money import format_amount, parse_amount
 
 if TYPE_CHECKING:
@@ -40,7 +42,9 @@ class WalletCog(commands.Cog):
         self.bot = bot
 
     @property
-    def economy(self):
+    def economy(self) -> Economy:
+        if self.bot.economy is None:
+            raise RuntimeError("economy used before the bot finished starting")
         return self.bot.economy
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -282,7 +286,8 @@ class WalletCog(commands.Cog):
             "Only transactions signed with your key can move your PB. Nobody else can, admins included.\n"
             "**This is permanent.** Lose the key file and the PB in this wallet is locked for good.",
         )
-        embed.add_field(name="Public key", value=f"`{key.pubkey.hex()}`", inline=False)
+        if key.pubkey is not None:
+            embed.add_field(name="Public key", value=f"`{key.pubkey.hex()}`", inline=False)
         embed.add_field(name="Next nonce", value=str(key.next_nonce), inline=True)
         embed.set_footer(text=f"txid #{txid}")
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -330,7 +335,7 @@ class WalletCog(commands.Cog):
         else:
             lines = []
             for item in items:
-                sign = "+" if item.amount > 0 else "−"
+                sign = "+" if item.amount > 0 else "\N{MINUS SIGN}"
                 label = ui.KIND_LABELS.get(item.kind, item.kind)
                 direction = "from" if item.amount > 0 else "to"
                 if item.counterparty_count > 1:
@@ -357,11 +362,11 @@ class WalletCog(commands.Cog):
             raise NotFound(f"Transaction #{txid} not found (or it isn't yours).")
         embed = ui.info_embed(f"Transaction #{tx.id}", ui.KIND_LABELS.get(tx.kind, tx.kind))
         embed.add_field(name="Time", value=ui.ts(tx.created_at, "f"), inline=False)
-        debits = [l for l in tx.legs if l.amount < 0]
-        credits = [l for l in tx.legs if l.amount > 0]
+        debits = [leg for leg in tx.legs if leg.amount < 0]
+        credits = [leg for leg in tx.legs if leg.amount > 0]
         if tx.legs:
-            embed.add_field(name="From", value="\n".join(_leg_line(l) for l in debits), inline=True)
-            embed.add_field(name="To", value="\n".join(_leg_line(l) for l in credits), inline=True)
+            embed.add_field(name="From", value="\n".join(_leg_line(leg) for leg in debits), inline=True)
+            embed.add_field(name="To", value="\n".join(_leg_line(leg) for leg in credits), inline=True)
         else:
             embed.add_field(name="Wallet", value=f"<@{tx.actor_id}>", inline=True)
         if tx.memo:
@@ -403,6 +408,8 @@ class WalletCog(commands.Cog):
     @app_commands.command(name="leaderboard", description="Top PB wallets in this server.")
     @app_commands.guild_only()
     async def leaderboard(self, interaction: discord.Interaction) -> None:
+        if interaction.guild_id is None:  # guild_only, but Discord types it optional
+            raise NotFound("Use /leaderboard in a server.")
         rows = await self.economy.leaderboard(interaction.guild_id, limit=10)
         embed = ui.info_embed("Leaderboard")
         if rows:
@@ -462,21 +469,17 @@ class ConfirmView(discord.ui.View):
         await interaction.response.edit_message(embed=ui.info_embed("Transaction cancelled"), view=None)
 
     async def on_timeout(self) -> None:
-        try:
+        with contextlib.suppress(discord.HTTPException):
             await self.origin.edit_original_response(
                 embed=ui.info_embed("Transaction expired", "No PB was sent."), view=None
             )
-        except discord.HTTPException:
-            pass
 
     async def on_error(
         self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item
     ) -> None:
         log.exception("Error in send confirmation", exc_info=error)
-        try:
+        with contextlib.suppress(discord.HTTPException):
             await interaction.followup.send(
                 embed=ui.error_embed("Something went wrong. No PB was sent unless a receipt was posted."),
                 ephemeral=True,
             )
-        except discord.HTTPException:
-            pass

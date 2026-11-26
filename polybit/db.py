@@ -15,7 +15,8 @@ _MIGRATION_LOCK_ID = 0x4254_5800
 
 async def create_pool(dsn: str, *, min_size: int = 1, max_size: int = 10) -> asyncpg.Pool:
     pool = await asyncpg.create_pool(dsn, min_size=min_size, max_size=max_size)
-    assert pool is not None
+    if pool is None:
+        raise RuntimeError("could not create a database pool")
     return pool
 
 

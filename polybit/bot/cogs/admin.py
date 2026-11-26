@@ -13,6 +13,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from polybit.bot import ui
+from polybit.economy import Economy
 from polybit.errors import PermissionDenied
 from polybit.money import format_amount, parse_amount
 
@@ -25,6 +26,12 @@ class AdminCog(commands.GroupCog, group_name="pbadmin", group_description="PolyB
     def __init__(self, bot: PolyBitBot) -> None:
         self.bot = bot
         super().__init__()
+
+    @property
+    def economy(self) -> Economy:
+        if self.bot.economy is None:
+            raise RuntimeError("economy used before the bot finished starting")
+        return self.bot.economy
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if not self.bot.settings.is_admin(interaction.user.id):
@@ -41,7 +48,7 @@ class AdminCog(commands.GroupCog, group_name="pbadmin", group_description="PolyB
         reason: app_commands.Range[str, 1, 200],
     ) -> None:
         units = parse_amount(amount)
-        balance = await self.bot.economy.grant(
+        balance = await self.economy.grant(
             interaction.user.id, user.id, units, reason=reason, guild_id=interaction.guild_id
         )
         await interaction.response.send_message(
@@ -62,7 +69,7 @@ class AdminCog(commands.GroupCog, group_name="pbadmin", group_description="PolyB
         reason: app_commands.Range[str, 1, 200],
     ) -> None:
         units = parse_amount(amount)
-        balance = await self.bot.economy.revoke(
+        balance = await self.economy.revoke(
             interaction.user.id, user.id, units, reason=reason, guild_id=interaction.guild_id
         )
         await interaction.response.send_message(
@@ -86,7 +93,7 @@ class AdminCog(commands.GroupCog, group_name="pbadmin", group_description="PolyB
         frozen: bool,
         reason: app_commands.Range[str, 1, 200],
     ) -> None:
-        await self.bot.economy.set_frozen(interaction.user.id, user.id, frozen, reason=reason)
+        await self.economy.set_frozen(interaction.user.id, user.id, frozen, reason=reason)
         if frozen:
             embed = ui.ok_embed("Wallet frozen", f"{user.mention} can no longer send or mine PB.")
         else:
@@ -96,7 +103,7 @@ class AdminCog(commands.GroupCog, group_name="pbadmin", group_description="PolyB
     @app_commands.command(name="audit", description="Verify ledger integrity.")
     async def audit(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
-        report = await self.bot.economy.audit()
+        report = await self.economy.audit()
         if report.ok:
             embed = ui.ok_embed(
                 "Ledger OK",
@@ -123,7 +130,7 @@ class AdminCog(commands.GroupCog, group_name="pbadmin", group_description="PolyB
         reason: app_commands.Range[str, 1, 200],
     ) -> None:
         units = parse_amount(amount)
-        left = await self.bot.economy.treasury_pay(
+        left = await self.economy.treasury_pay(
             interaction.user.id,
             user.id,
             units,

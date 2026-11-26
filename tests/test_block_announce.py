@@ -1,16 +1,21 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
+import discord
 
 from polybit import chain
 from polybit.bot.client import PolyBitBot
 from polybit.bot.cogs.chain import ChainCog
 from polybit.config import Settings
 
-BLOCK = chain.Block(7, b"\x01" * 32, b"\x02" * 32, b"\x03" * 32, 12, datetime(2026, 1, 1, tzinfo=timezone.utc))
+BLOCK = chain.Block(7, b"\x01" * 32, b"\x02" * 32, b"\x03" * 32, 12, datetime(2026, 1, 1, tzinfo=UTC))
 
 
-class _Channel:
+class _Channel(discord.abc.Messageable):
     def __init__(self, fail=False):
         self.sent, self.fail = [], fail
+
+    async def _get_channel(self):
+        return self
 
     async def send(self, **kwargs):
         if self.fail:
@@ -30,6 +35,11 @@ async def test_new_block_is_posted_to_channel():
     [embed] = ch.sent
     assert "Block #7" in embed.title
     assert BLOCK.hash.hex() in str(embed.fields)
+
+
+async def test_channel_that_cant_take_messages_is_skipped():
+    category = object()  # e.g. a category id was configured by mistake
+    await _cog(555, category).on_block(BLOCK)  # logs a warning, doesn't raise
 
 
 async def test_no_channel_set_posts_nothing():

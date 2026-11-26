@@ -37,7 +37,7 @@ SIGNED_QUERY = """
 
 def _legs(row: asyncpg.Record) -> Counter:
     legs: Counter = Counter()
-    for owner, name, amount in zip(row["owners"], row["names"], row["amounts"]):
+    for owner, name, amount in zip(row["owners"], row["names"], row["amounts"], strict=True):
         legs[("user", owner) if owner is not None else ("system", name)] += amount
     return legs
 
@@ -67,6 +67,8 @@ def _check(row: asyncpg.Record, binds: dict[int, tuple[int, bytes]]) -> str | No
     except ValueError:
         return f"Journal {jid} has a signed payload that isn't JSON."
     chain = signed.payload.get("chain")
+    if not isinstance(chain, str):
+        return f"Journal {jid} has a signed payload with no network name."
     try:
         if row["kind"] == "bind-key":
             user_id, pubkey = signing.check_bind(signed, chain=chain)

@@ -79,6 +79,9 @@ class ChainCog(commands.Cog):
             return
         try:
             channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
+            if not isinstance(channel, discord.abc.Messageable):
+                log.warning("PB_BLOCK_CHANNEL_ID %s isn't a channel the bot can post in", channel_id)
+                return
             await channel.send(embed=block_embed(block, title=f"⛓️ Block #{block.height} sealed"))
         except Exception:
             # A missing channel or permission must never stop the sealer.
@@ -101,6 +104,8 @@ class ChainCog(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def anchor_loop(self) -> None:
+        if self.anchorer is None:
+            return
         try:
             await self.anchorer.tick()
         except anchor.RpcError as exc:

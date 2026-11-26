@@ -97,7 +97,7 @@ async def test_audit_catches_rehashed_forgery(economy, pool):
     forged = ledger.entry_hash(
         journal_id=row["id"], created_at=row["created_at"], kind=row["kind"], memo="forged",
         actor_id=row["actor_id"], guild_id=row["guild_id"], idempotency_key=row["idempotency_key"],
-        legs=zip(row["accounts"], row["amounts"]),
+        legs=zip(row["accounts"], row["amounts"], strict=True),
     )
     await _forge(pool, "UPDATE journal SET memo = 'forged', hash = $2 WHERE id = $1", ids[0], forged)
     report = await economy.audit()

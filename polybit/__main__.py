@@ -75,7 +75,8 @@ async def _anchors(settings: Settings) -> int:
         await pool.close()
     for r in results:
         mark = "OK " if r.ok else "BAD"
-        print(f"{mark} block #{r.anchor.height}  {anchor.tx_url(settings, r.anchor)}" + ("" if r.ok else f"  {r.problem}"))
+        detail = "" if r.ok else f"  {r.problem}"
+        print(f"{mark} block #{r.anchor.height}  {anchor.tx_url(settings, r.anchor)}{detail}")
     if not results:
         print("No confirmed anchors yet.")
     return 0 if all(r.ok for r in results) else 1

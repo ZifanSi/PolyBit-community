@@ -16,7 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import asyncpg
 
@@ -71,7 +71,7 @@ def block_hash(*, height: int, prev_hash: bytes, merkle: bytes, tx_count: int, c
         "prev": prev_hash.hex(),
         "merkle": merkle.hex(),
         "count": tx_count,
-        "at": created_at.astimezone(timezone.utc).isoformat(timespec="microseconds"),
+        "at": created_at.astimezone(UTC).isoformat(timespec="microseconds"),
     }
     return _sha(json.dumps(body, sort_keys=True, separators=(",", ":")).encode())
 

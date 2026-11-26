@@ -1,3 +1,5 @@
+from datetime import UTC
+
 import asyncpg
 import pytest
 
@@ -48,10 +50,10 @@ async def test_audit_catches_edits_behind_the_apps_back(economy, pool):
 
 
 def test_hash_covers_every_field():
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     base = dict(
-        journal_id=1, created_at=datetime(2026, 1, 1, tzinfo=timezone.utc), kind="transfer",
+        journal_id=1, created_at=datetime(2026, 1, 1, tzinfo=UTC), kind="transfer",
         memo=None, actor_id=None, guild_id=None, idempotency_key=None, legs=[(1, -5), (2, 5)],
     )
     h = ledger.entry_hash(**base)
