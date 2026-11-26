@@ -7,6 +7,8 @@
     /gettransaction    details of one transaction
     /mine              claim the periodic reward
     /getinfo           money-supply statistics
+    /setkey            make the wallet self-custody (see polybit/signing.py)
+    /submit            broadcast a transfer signed offline
 """
 
 from __future__ import annotations
@@ -71,6 +73,10 @@ class WalletCog(commands.Cog):
         embed.set_thumbnail(url=target.display_avatar.url)
         if await self.economy.is_frozen(target.id):
             embed.add_field(name="Status", value="Frozen", inline=False)
+        key = await self.economy.wallet_key(target.id)
+        if key.pubkey is not None:
+            embed.add_field(name="Self-custody key", value=f"`{key.pubkey.hex()}`", inline=False)
+            embed.add_field(name="Next nonce", value=str(key.next_nonce), inline=True)
         self._add_welcome(interaction, embed)
         await interaction.response.send_message(embed=embed, ephemeral=not public)
 
@@ -264,6 +270,50 @@ class WalletCog(commands.Cog):
             f"Your new balance: {ui.amount(result.sender_balance)}", ephemeral=True
         )
 
+    # ------------------------------------------------------------ self-custody
+
+    @app_commands.command(name="setkey", description="Make your wallet self-custody with a key only you hold.")
+    @app_commands.describe(proof="Output of `polybit wallet bind --user <your id>`, starts with pb1.")
+    async def setkey(self, interaction: discord.Interaction, proof: app_commands.Range[str, 10, 4000]) -> None:
+        txid = await self.economy.bind_key(interaction.user.id, proof, guild_id=interaction.guild_id)
+        key = await self.economy.wallet_key(interaction.user.id)
+        embed = ui.ok_embed(
+            "Wallet is now self-custody",
+            "Only transactions signed with your key can move your PB. Nobody else can, admins included.\n"
+            "**This is permanent.** Lose the key file and the PB in this wallet is locked for good.",
+        )
+        embed.add_field(name="Public key", value=f"`{key.pubkey.hex()}`", inline=False)
+        embed.add_field(name="Next nonce", value=str(key.next_nonce), inline=True)
+        embed.set_footer(text=f"txid #{txid}")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="submit", description="Broadcast a transfer signed offline with `polybit wallet send`.")
+    @app_commands.describe(tx="The signed transfer, starts with pb1.")
+    async def submit(self, interaction: discord.Interaction, tx: app_commands.Range[str, 10, 4000]) -> None:
+        transfer, result = await self.economy.submit(tx, guild_id=interaction.guild_id)
+        if result.replayed:
+            await interaction.response.send_message(
+                embed=ui.info_embed("Already sent", f"Transaction #{result.journal_id} was already processed."),
+                ephemeral=True,
+            )
+            return
+        recipients = " ".join(f"<@{uid}>" for uid, _ in transfer.payouts)
+        embed = ui.ok_embed(
+            "Signed transaction confirmed",
+            f"<@{transfer.sender_id}> → {recipients}\n{ui.amount(result.amount)}",
+        )
+        if transfer.memo:
+            embed.add_field(name="Note", value=transfer.memo, inline=False)
+        if result.fee:
+            embed.add_field(name="Fee", value=format_amount(result.fee), inline=True)
+        embed.add_field(name="Nonce", value=str(transfer.nonce), inline=True)
+        embed.set_footer(text=f"txid #{result.journal_id} · signed by the sender's key")
+        await interaction.response.send_message(
+            content=recipients,
+            embed=embed,
+            allowed_mentions=discord.AllowedMentions(users=[discord.Object(uid) for uid, _ in transfer.payouts]),
+        )
+
     # ------------------------------------------------------- listtransactions
 
     @app_commands.command(name="listtransactions", description="List your recent PB transactions.")
@@ -309,12 +359,17 @@ class WalletCog(commands.Cog):
         embed.add_field(name="Time", value=ui.ts(tx.created_at, "f"), inline=False)
         debits = [l for l in tx.legs if l.amount < 0]
         credits = [l for l in tx.legs if l.amount > 0]
-        embed.add_field(name="From", value="\n".join(_leg_line(l) for l in debits), inline=True)
-        embed.add_field(name="To", value="\n".join(_leg_line(l) for l in credits), inline=True)
+        if tx.legs:
+            embed.add_field(name="From", value="\n".join(_leg_line(l) for l in debits), inline=True)
+            embed.add_field(name="To", value="\n".join(_leg_line(l) for l in credits), inline=True)
+        else:
+            embed.add_field(name="Wallet", value=f"<@{tx.actor_id}>", inline=True)
         if tx.memo:
             embed.add_field(name="Note", value=tx.memo, inline=False)
         if tx.hash is not None:
             embed.add_field(name="Hash", value=f"`{tx.hash.hex()}`", inline=False)
+        if tx.signer is not None:
+            embed.add_field(name="Signed by", value=f"`{tx.signer.hex()}`", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     # ------------------------------------------------------------------- mine

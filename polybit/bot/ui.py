@@ -21,6 +21,7 @@ KIND_LABELS = {
     "escrow-hold": "Held in escrow",
     "escrow-release": "Escrow payout",
     "escrow-refund": "Escrow refund",
+    "bind-key": "Wallet key bound",
 }
 
 SYSTEM_LABELS = {

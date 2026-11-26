@@ -13,7 +13,7 @@ from typing import Sequence
 
 import asyncpg
 
-from polybit import chain, ledger
+from polybit import chain, custody, ledger, signing
 from polybit.config import Settings
 from polybit.errors import (
     AccountFrozen,
@@ -23,6 +23,7 @@ from polybit.errors import (
     InvalidTransfer,
     PermissionDenied,
     RewardsLocked,
+    SelfCustody,
 )
 from polybit.money import MAX_AMOUNT, format_amount
 from polybit.policy import Policy
@@ -75,6 +76,7 @@ class Transaction:
     created_at: datetime
     legs: list[TxLeg]
     hash: bytes | None = None  # None for entries written before hashing existed
+    signer: bytes | None = None  # wallet key that signed it, for self-custody wallets
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,12 @@ class Supply:
     escrow: int  # held by extensions until settled
     circulating: int  # held in user wallets
     wallets: int
+
+
+@dataclass(frozen=True)
+class WalletKey:
+    pubkey: bytes | None  # None: custodial wallet
+    next_nonce: int
 
 
 @dataclass(frozen=True)
@@ -100,6 +108,24 @@ def _validate_amount(amount: int) -> None:
         raise AmountError("Amount must be greater than zero.")
     if amount > MAX_AMOUNT:
         raise AmountError("Amount is too large.")
+
+
+def _check_payouts(sender_id: int, payouts: Sequence[tuple[int, int]]) -> int:
+    """Validate a payout list. Returns the total."""
+    if not payouts:
+        raise InvalidTransfer("Choose at least one recipient.")
+    if len(payouts) > MAX_RECIPIENTS:
+        raise InvalidTransfer(f"At most {MAX_RECIPIENTS} recipients per transaction.")
+    recipient_ids = [r for r, _ in payouts]
+    if len(set(recipient_ids)) != len(recipient_ids):
+        raise InvalidTransfer("Each recipient may appear only once.")
+    if sender_id in recipient_ids:
+        raise InvalidTransfer("You can't send PB to yourself.")
+    for _, amount in payouts:
+        _validate_amount(amount)
+    total = sum(amount for _, amount in payouts)
+    _validate_amount(total)
+    return total
 
 
 def _clean_memo(memo: str | None) -> str | None:
@@ -154,6 +180,16 @@ class Economy:
         )
         if frozen:
             raise AccountFrozen()
+
+    async def require_spendable(self, conn: asyncpg.Connection, user_id: int) -> None:
+        """Not frozen, and custodial: the bot may move this wallet's PB on the user's word."""
+        row = await conn.fetchrow(
+            "SELECT frozen, pubkey FROM users WHERE discord_id = $1 FOR SHARE", user_id
+        )
+        if row is not None and row["frozen"]:
+            raise AccountFrozen()
+        if row is not None and row["pubkey"] is not None:
+            raise SelfCustody()
 
     def _require_admin(self, actor_id: int) -> None:
         if not self.settings.is_admin(actor_id):
@@ -214,6 +250,13 @@ class Economy:
             )
         return value or 0
 
+    async def wallet_key(self, user_id: int) -> WalletKey:
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT pubkey, nonce FROM users WHERE discord_id = $1", user_id)
+        if row is None:
+            return WalletKey(None, 1)
+        return WalletKey(bytes(row["pubkey"]) if row["pubkey"] is not None else None, row["nonce"] + 1)
+
     async def is_frozen(self, user_id: int) -> bool:
         async with self.pool.acquire() as conn:
             return bool(
@@ -263,7 +306,7 @@ class Economy:
         for anyone else it is reported as not found."""
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT id, kind, memo, actor_id, created_at, hash FROM journal WHERE id = $1",
+                "SELECT id, kind, memo, actor_id, created_at, hash, signer FROM journal WHERE id = $1",
                 journal_id,
             )
             if row is None:
@@ -278,6 +321,8 @@ class Economy:
                 journal_id,
             )
         participants = {leg["owner_id"] for leg in legs if leg["owner_id"] is not None}
+        if not legs:  # a key binding: it's the binder's
+            participants.add(row["actor_id"])
         if viewer_id not in participants and not self.settings.is_admin(viewer_id):
             return None
         return Transaction(
@@ -288,6 +333,7 @@ class Economy:
             created_at=row["created_at"],
             legs=[TxLeg(owner_id=l["owner_id"], system_name=l["name"], amount=l["amount"]) for l in legs],
             hash=bytes(row["hash"]) if row["hash"] is not None else None,
+            signer=bytes(row["signer"]) if row["signer"] is not None else None,
         )
 
     async def leaderboard(self, guild_id: int, *, limit: int = 10) -> list[tuple[int, int]]:
@@ -369,44 +415,57 @@ class Economy:
         is. The fee (if any) is charged once on the total, on top, to the sender.
         `PayResult.amount` is the total sent, excluding the fee.
         """
-        if not payouts:
-            raise InvalidTransfer("Choose at least one recipient.")
-        if len(payouts) > MAX_RECIPIENTS:
-            raise InvalidTransfer(f"At most {MAX_RECIPIENTS} recipients per transaction.")
-        recipient_ids = [r for r, _ in payouts]
-        if len(set(recipient_ids)) != len(recipient_ids):
-            raise InvalidTransfer("Each recipient may appear only once.")
-        if sender_id in recipient_ids:
-            raise InvalidTransfer("You can't send PB to yourself.")
-        for _, amount in payouts:
-            _validate_amount(amount)
-        total = sum(amount for _, amount in payouts)
-        _validate_amount(total)
+        total = _check_payouts(sender_id, payouts)
         fee = self.transfer_fee(total)
-
         async with self.pool.acquire() as conn, conn.transaction():
-            # Create wallets in a fixed (id) order so concurrent first-time inserts
-            # of the same users cannot deadlock each other.
-            wallets = {
-                uid: await self.ensure_wallet(conn, uid)
-                for uid in sorted({sender_id, *recipient_ids})
-            }
-            sender = wallets[sender_id]
-            await self.require_not_frozen(conn, sender_id)
-            legs = [(sender, -(total + fee))]
-            legs += [(wallets[uid], amount) for uid, amount in payouts]
-            if fee:
-                legs.append((await self.system_account(conn, ledger.SYSTEM_TREASURY), fee))
-            result = await ledger.post(
-                conn,
-                kind="transfer",
-                legs=legs,
-                memo=_clean_memo(memo),
-                actor_id=sender_id,
-                guild_id=guild_id,
-                idempotency_key=idempotency_key,
+            wallets = await self._wallets(conn, sender_id, payouts)
+            await self.require_spendable(conn, sender_id)
+            return await self._post_transfer(
+                conn, wallets, sender_id, payouts, total, fee,
+                memo=_clean_memo(memo), guild_id=guild_id, idempotency_key=idempotency_key,
             )
-            balance = await conn.fetchval("SELECT balance FROM accounts WHERE id = $1", sender)
+
+    async def _wallets(
+        self, conn: asyncpg.Connection, sender_id: int, payouts: Sequence[tuple[int, int]]
+    ) -> dict[int, int]:
+        # Create wallets in a fixed (id) order so concurrent first-time inserts
+        # of the same users cannot deadlock each other.
+        ids = sorted({sender_id, *(uid for uid, _ in payouts)})
+        return {uid: await self.ensure_wallet(conn, uid) for uid in ids}
+
+    async def _post_transfer(
+        self,
+        conn: asyncpg.Connection,
+        wallets: dict[int, int],
+        sender_id: int,
+        payouts: Sequence[tuple[int, int]],
+        total: int,
+        fee: int,
+        *,
+        memo: str | None,
+        guild_id: int | None,
+        idempotency_key: str | None,
+        signed: tuple[bytes, signing.Signed] | None = None,
+    ) -> PayResult:
+        sender = wallets[sender_id]
+        legs = [(sender, -(total + fee))]
+        legs += [(wallets[uid], amount) for uid, amount in payouts]
+        if fee:
+            legs.append((await self.system_account(conn, ledger.SYSTEM_TREASURY), fee))
+        signer, sig = signed if signed else (None, None)
+        result = await ledger.post(
+            conn,
+            kind="transfer",
+            legs=legs,
+            memo=memo,
+            actor_id=sender_id,
+            guild_id=guild_id,
+            idempotency_key=idempotency_key,
+            signer=signer,
+            signature=sig.signature if sig else None,
+            payload=sig.text if sig else None,
+        )
+        balance = await conn.fetchval("SELECT balance FROM accounts WHERE id = $1", sender)
         return PayResult(
             journal_id=result.journal_id,
             amount=total,
@@ -414,6 +473,84 @@ class Economy:
             sender_balance=balance,
             replayed=result.replayed,
         )
+
+    # ------------------------------------------------------------ self-custody
+
+    async def bind_key(self, user_id: int, token: str, *, guild_id: int | None = None) -> int:
+        """Make a wallet self-custody, for good. `token` is a bind message signed by the
+        new key, which proves the user holds it. Returns the binding's journal id."""
+        signed = signing.decode(token)
+        bound_user, pubkey = signing.check_bind(signed, chain=self.settings.chain_id)
+        if bound_user != user_id:
+            raise signing.SignatureError("That key-binding message is for a different user.")
+        async with self.pool.acquire() as conn, conn.transaction():
+            await self.ensure_wallet(conn, user_id)
+            # FOR UPDATE before the entry takes its id: a debit racing this bind either
+            # commits first (lower id, unsigned is fine) or waits and then needs the key.
+            current = await conn.fetchval(
+                "SELECT pubkey FROM users WHERE discord_id = $1 FOR UPDATE", user_id
+            )
+            if current is not None:
+                raise InvalidTransfer("This wallet already has a key. Keys are permanent.")
+            if await conn.fetchval("SELECT 1 FROM users WHERE pubkey = $1", pubkey):
+                raise InvalidTransfer("That key belongs to another wallet. Make a new one.")
+            result = await ledger.post(
+                conn,
+                kind="bind-key",
+                legs=[],
+                actor_id=user_id,
+                guild_id=guild_id,
+                idempotency_key=f"bind:{user_id}",
+                signer=pubkey,
+                signature=signed.signature,
+                payload=signed.text,
+            )
+            await conn.execute("UPDATE users SET pubkey = $2 WHERE discord_id = $1", user_id, pubkey)
+        return result.journal_id
+
+    async def submit(self, token: str, *, guild_id: int | None = None) -> tuple[signing.Transfer, PayResult]:
+        """Apply a transfer signed offline by a self-custody wallet. Anyone may submit it:
+        the signature is the authorization, not who pastes it."""
+        signed = signing.decode(token)
+        tx = signing.parse_transfer(signed, chain=self.settings.chain_id)
+        total = _check_payouts(tx.sender_id, tx.payouts)
+        required = self.transfer_fee(total)
+        if tx.fee < required:
+            raise InvalidTransfer(
+                f"This transfer needs a fee of at least {format_amount(required)}. Sign it again."
+            )
+        key = f"tx:{tx.sender_id}:{tx.nonce}"
+
+        async with self.pool.acquire() as conn, conn.transaction():
+            # Check the signature before touching anything else: a bad token writes nothing.
+            row = await conn.fetchrow(
+                "SELECT frozen, pubkey, nonce FROM users WHERE discord_id = $1 FOR UPDATE", tx.sender_id
+            )
+            if row is None or row["pubkey"] is None:
+                raise signing.SignatureError("The sender's wallet has no key. Bind one with /setkey first.")
+            pubkey = bytes(row["pubkey"])
+            if not signing.verify(pubkey, signed.raw, signed.signature):
+                raise signing.SignatureError("Signature doesn't match the sender's key.")
+            wallets = await self._wallets(conn, tx.sender_id, tx.payouts)
+            nonce = row["nonce"]
+            if tx.nonce <= nonce:
+                done = await conn.fetchrow("SELECT id, signature FROM journal WHERE idempotency_key = $1", key)
+                if done is not None and bytes(done["signature"]) == signed.signature:
+                    balance = await conn.fetchval(
+                        "SELECT balance FROM accounts WHERE id = $1", wallets[tx.sender_id]
+                    )
+                    return tx, PayResult(done["id"], total, tx.fee, balance, replayed=True)
+                raise InvalidTransfer(f"Nonce {tx.nonce} is already used. The next one is {nonce + 1}.")
+            if tx.nonce != nonce + 1:
+                raise InvalidTransfer(f"Nonce {tx.nonce} is too high. The next one is {nonce + 1}.")
+            if row["frozen"]:
+                raise AccountFrozen()
+            result = await self._post_transfer(
+                conn, wallets, tx.sender_id, tx.payouts, total, tx.fee,
+                memo=tx.memo, guild_id=guild_id, idempotency_key=key, signed=(pubkey, signed),
+            )
+            await conn.execute("UPDATE users SET nonce = $2 WHERE discord_id = $1", tx.sender_id, tx.nonce)
+        return tx, result
 
     async def claim_daily(self, user_id: int, *, guild_id: int | None = None) -> DailyResult:
         s = self.settings
@@ -490,6 +627,8 @@ class Economy:
         _validate_amount(amount)
         async with self.pool.acquire() as conn, conn.transaction():
             wallet = await self.ensure_wallet(conn, user_id)
+            if await conn.fetchval("SELECT pubkey FROM users WHERE discord_id = $1 FOR SHARE", user_id):
+                raise SelfCustody("That wallet is self-custody. Nobody but its key holder can take PB from it.")
             burn = await self.system_account(conn, ledger.SYSTEM_BURN)
             await ledger.post(
                 conn,
@@ -549,7 +688,7 @@ class Economy:
         """Move PB from the user's wallet into escrow. Returns the journal id."""
         _validate_amount(amount)
         wallet = await self.ensure_wallet(conn, user_id)
-        await self.require_not_frozen(conn, user_id)
+        await self.require_spendable(conn, user_id)
         escrow = await self.system_account(conn, ledger.SYSTEM_ESCROW)
         result = await ledger.post(
             conn,
@@ -667,6 +806,7 @@ class Economy:
                     if tampered <= 20:
                         problems.append(f"Journal {r['id']} doesn't match its hash (edited after the fact).")
 
+            problems += await custody.audit(conn)
             problems += await chain.audit_blocks(conn)
 
             entries = await conn.fetchval("SELECT COUNT(*) FROM journal")

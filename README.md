@@ -24,6 +24,7 @@
 | Settlement | double-entry, append-only, balanced in the DB |
 | Integrity | every tx SHA-256 hashed, `polybit audit` recomputes all |
 | Blocks | every 10 min, Merkle root, linked to the previous block, hash posted to a channel |
+| Custody | optional Ed25519 wallet keys, signed txs with nonces, nobody else can spend |
 | Supply | minted on rewards, burnable, fully auditable |
 | Network | Discord slash commands |
 
@@ -50,6 +51,15 @@ sh scripts/restore.sh backups/<file>.dump --yes   # wipes, restores, audits
 `/getbalance` `/send` `/sendmany` `/mine` `/leaderboard` `/getinfo` `/pbadmin`
 
 `/block` `/verify` check any tx against the chain yourself.
+
+Self-custody: keep the key, sign offline, paste the result. Once a key is bound, `/send`,
+admins and the database itself can't move that wallet's PB.
+
+```sh
+polybit wallet keygen                                      # ~/.polybit/wallet.key, never leaves your machine
+polybit wallet bind --user <your discord id>               # -> /setkey
+polybit wallet send --from <id> --to <id>=2.5 --nonce 1    # -> /submit
+```
 
 ## Audit
 

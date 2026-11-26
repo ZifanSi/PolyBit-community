@@ -39,6 +39,8 @@ async def test_command_tree():
         "mine",
         "getinfo",
         "leaderboard",
+        "setkey",
+        "submit",
         "block",
         "verify",
         "pbadmin mint",

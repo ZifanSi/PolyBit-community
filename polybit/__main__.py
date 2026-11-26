@@ -3,6 +3,7 @@
     polybit run       start the Discord bot (default)
     polybit migrate   apply database migrations and exit
     polybit audit     verify ledger integrity and exit (non-zero status on problems)
+    polybit wallet    offline self-custody wallet (see polybit/wallet_cli.py)
 """
 
 from __future__ import annotations
@@ -64,6 +65,11 @@ def _run(settings: Settings) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["wallet"]:  # offline: no .env, no database
+        from polybit.wallet_cli import main as wallet_main
+
+        return wallet_main(argv[1:])
     parser = argparse.ArgumentParser(prog="polybit", description="PolyBit: Discord-native PB currency")
     parser.add_argument("command", nargs="?", default="run", choices=["run", "migrate", "audit"])
     args = parser.parse_args(argv)

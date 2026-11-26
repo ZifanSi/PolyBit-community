@@ -17,6 +17,7 @@ T = TypeVar("T")
 
 # Dotted Python module path, e.g. "mycompany.polybit_ext".
 MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$")
+CHAIN_ID_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 
 
 class ConfigError(ValueError):
@@ -39,7 +40,7 @@ def _str_tuple(raw: str) -> tuple[str, ...]:
 class Settings:
     """Bot and ledger settings. Amounts are in units (see polybit.money)."""
 
-    discord_token: str = ""
+    discord_token: str = field(default="", repr=False)
     database_url: str = "postgresql://polybit:polybit@localhost:5432/polybit"
     # Discord user IDs allowed to mint, burn and freeze. Wallets are global, so
     # this is deliberately NOT tied to per-server administrator permissions.
@@ -70,6 +71,9 @@ class Settings:
     block_channel_id: int | None = None
     # Most slash commands one user may run per minute (admins exempt). 0 = no limit.
     rate_limit_per_minute: int = 20
+    # Name of this PolyBit network. Signed transactions name it, so a signature made for
+    # one deployment can't be replayed on another. Changing it voids unsent signatures.
+    chain_id: str = "polybit"
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -109,6 +113,7 @@ class Settings:
             block_minutes=read("PB_BLOCK_MINUTES", float, d.block_minutes),
             block_channel_id=read("PB_BLOCK_CHANNEL_ID", _opt_int, d.block_channel_id),
             rate_limit_per_minute=read("PB_RATE_LIMIT_PER_MINUTE", int, d.rate_limit_per_minute),
+            chain_id=env.get("PB_CHAIN_ID", d.chain_id),
         )
         if problems:
             raise ConfigError("; ".join(problems))
@@ -140,6 +145,7 @@ class Settings:
         check(0 <= self.api_port <= 65535, "PB_API_PORT must be 0-65535")
         check(self.block_minutes >= 0, "PB_BLOCK_MINUTES can't be negative")
         check(self.rate_limit_per_minute >= 0, "PB_RATE_LIMIT_PER_MINUTE can't be negative")
+        check(bool(CHAIN_ID_RE.match(self.chain_id)), "PB_CHAIN_ID must be 1-32 of a-z 0-9 - _")
 
         if problems:
             raise ConfigError("; ".join(problems))

@@ -63,3 +63,13 @@ class RewardsLocked(PolyBitError):
         ts = int(eligible_at.timestamp())
         super().__init__(f"Rewards aren't available for you yet. Try again <t:{ts}:R>.")
         self.eligible_at = eligible_at
+
+
+class SelfCustody(PolyBitError):
+    """The wallet has a key: only a transaction signed with it can move its PB."""
+
+    def __init__(self, message: str | None = None) -> None:
+        super().__init__(
+            message
+            or "This wallet is self-custody. Sign the transfer with `polybit wallet send` and post it with /submit."
+        )

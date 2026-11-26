@@ -72,6 +72,8 @@ Always use `--redact` so secret values never appear in your terminal or logs.
 - Secrets live only in `.env` (local) or your host's secret store (production).
 - Tests use synthetic data: small fake IDs like `1`, `2`, `3`, never real Discord IDs.
 - Use a separate bot token and database for development and production.
+- Self-custody wallet keys (`~/.polybit/wallet.key`) belong to users and never touch the
+  server. Only the signed `pb1.` token is sent.
 - Don't paste `.env` contents, tokens or logs with IDs into issues or chat.
 
 ## Reporting a vulnerability

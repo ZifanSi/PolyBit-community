@@ -8,7 +8,10 @@ and guarantees that:
 * accounts are locked in ascending id order, so concurrent postings cannot deadlock;
 * an entry with an idempotency key is applied at most once;
 * every entry carries a SHA-256 of its full content (see `entry_hash`), so any later
-  edit to an entry or its legs is detectable by `polybit audit`.
+  edit to an entry or its legs is detectable by `polybit audit`;
+* a signed entry (see polybit/signing.py) stores the signer, the signature and the exact
+  signed bytes, and they're part of the hash. Only a signed entry may have no legs
+  (binding a wallet key moves no money).
 """
 
 from __future__ import annotations
@@ -46,12 +49,15 @@ def entry_hash(
     guild_id: int | None,
     idempotency_key: str | None,
     legs: Iterable[tuple[int, int]],
+    signer: bytes | None = None,
+    signature: bytes | None = None,
+    payload: str | None = None,
 ) -> bytes:
     """SHA-256 over a canonical JSON form of one journal entry and its legs.
 
     Anyone with a copy of the ledger can recompute it; changing any field changes the hash.
     """
-    body = {
+    body: dict = {
         "v": 1,
         "id": journal_id,
         "at": created_at.astimezone(timezone.utc).isoformat(timespec="microseconds"),
@@ -62,15 +68,18 @@ def entry_hash(
         "key": idempotency_key,
         "legs": sorted([int(a), int(amt)] for a, amt in legs),
     }
+    if signature is not None:
+        body.update(v=2, signer=signer.hex(), sig=signature.hex(), payload=payload)
     raw = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(raw.encode("utf-8")).digest()
 
 
 ENTRY_QUERY = """
     SELECT j.id, j.created_at, j.kind, j.memo, j.actor_id, j.guild_id, j.idempotency_key, j.hash,
-           array_agg(p.account_id ORDER BY p.account_id) AS accounts,
-           array_agg(p.amount ORDER BY p.account_id) AS amounts
-    FROM journal j JOIN postings p ON p.journal_id = j.id
+           j.signer, j.signature, j.payload,
+           COALESCE(array_agg(p.account_id ORDER BY p.account_id) FILTER (WHERE p.id IS NOT NULL), '{}') AS accounts,
+           COALESCE(array_agg(p.amount ORDER BY p.account_id) FILTER (WHERE p.id IS NOT NULL), '{}') AS amounts
+    FROM journal j LEFT JOIN postings p ON p.journal_id = j.id
 """
 
 
@@ -85,7 +94,14 @@ def recompute(row: asyncpg.Record) -> bytes:
         guild_id=row["guild_id"],
         idempotency_key=row["idempotency_key"],
         legs=zip(row["accounts"], row["amounts"]),
+        signer=_bytes(row["signer"]),
+        signature=_bytes(row["signature"]),
+        payload=row["payload"],
     )
+
+
+def _bytes(value) -> bytes | None:
+    return None if value is None else bytes(value)
 
 
 def _merge_legs(legs: Iterable[tuple[int, int]]) -> dict[int, int]:
@@ -106,13 +122,18 @@ async def post(
     actor_id: int | None = None,
     guild_id: int | None = None,
     idempotency_key: str | None = None,
+    signer: bytes | None = None,
+    signature: bytes | None = None,
+    payload: str | None = None,
 ) -> PostResult:
     """Record one balanced journal entry and update cached balances."""
     if not conn.is_in_transaction():
         raise RuntimeError("ledger.post() must be called inside a transaction")
+    if (signer is None) != (signature is None) or (signer is None) != (payload is None):
+        raise ValueError("a signed entry needs signer, signature and payload together")
 
     merged = _merge_legs(legs)
-    if not merged:
+    if not merged and signature is None:
         raise ValueError("a journal entry needs at least one non-zero leg")
     if sum(merged.values()) != 0:
         raise ValueError("journal legs must sum to zero")
@@ -130,21 +151,28 @@ async def post(
         guild_id=guild_id,
         idempotency_key=idempotency_key,
         legs=merged.items(),
+        signer=signer,
+        signature=signature,
+        payload=payload,
     )
     journal_id = await conn.fetchval(
         """
-        INSERT INTO journal (id, created_at, kind, idempotency_key, memo, actor_id, guild_id, hash)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO journal (id, created_at, kind, idempotency_key, memo, actor_id, guild_id, hash,
+                             signer, signature, payload)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT (idempotency_key) DO NOTHING
         RETURNING id
         """,
         slot["id"], slot["at"], kind, idempotency_key, memo, actor_id, guild_id, digest,
+        signer, signature, payload,
     )
     if journal_id is None:  # idempotency key already used
         existing = await conn.fetchval(
             "SELECT id FROM journal WHERE idempotency_key = $1", idempotency_key
         )
         return PostResult(journal_id=existing, replayed=True)
+    if not merged:
+        return PostResult(journal_id=journal_id, replayed=False)
 
     account_ids = sorted(merged)
     rows = await conn.fetch(
