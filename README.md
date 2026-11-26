@@ -25,6 +25,7 @@
 | Integrity | every tx SHA-256 hashed, `polybit audit` recomputes all |
 | Blocks | every 10 min, Merkle root, linked to the previous block, hash posted to a channel |
 | Custody | optional Ed25519 wallet keys, signed txs with nonces, nobody else can spend |
+| Anchoring | latest block hash written to Base Sepolia, verifiable on basescan |
 | Supply | minted on rewards, burnable, fully auditable |
 | Network | Discord slash commands |
 
@@ -38,6 +39,10 @@ docker compose up -d
 ```
 
 `PB_API_PORT=9100` serves `/healthz` and Prometheus `/metrics` on localhost.
+
+Anchor to Base: `polybit anchors new-key`, fund the address from a Base Sepolia faucet,
+set `PB_ANCHOR_RPC_URL` (e.g. `https://sepolia.base.org`) and `PB_ANCHOR_KEY` in `.env`.
+`polybit anchors` re-reads every anchor from the chain and checks it against the db.
 
 ## Backup
 

@@ -3,6 +3,8 @@
     polybit run       start the Discord bot (default)
     polybit migrate   apply database migrations and exit
     polybit audit     verify ledger integrity and exit (non-zero status on problems)
+    polybit anchors   check every anchor against the public chain (non-zero status on problems)
+    polybit anchors new-key   make a key for PB_ANCHOR_KEY (offline)
     polybit wallet    offline self-custody wallet (see polybit/wallet_cli.py)
 """
 
@@ -56,6 +58,39 @@ async def _audit(settings: Settings) -> int:
     return 1
 
 
+async def _anchors(settings: Settings) -> int:
+    import aiohttp
+
+    from polybit import anchor
+    from polybit.db import create_pool
+
+    if not settings.anchor_rpc_url:
+        print("PB_ANCHOR_RPC_URL is not set: nothing to check against.", file=sys.stderr)
+        return 2
+    pool = await create_pool(settings.database_url, max_size=2)
+    try:
+        async with aiohttp.ClientSession() as session:
+            results = await anchor.verify_anchors(pool, anchor.Rpc(session, settings.anchor_rpc_url))
+    finally:
+        await pool.close()
+    for r in results:
+        mark = "OK " if r.ok else "BAD"
+        print(f"{mark} block #{r.anchor.height}  {anchor.tx_url(settings, r.anchor)}" + ("" if r.ok else f"  {r.problem}"))
+    if not results:
+        print("No confirmed anchors yet.")
+    return 0 if all(r.ok for r in results) else 1
+
+
+def _new_anchor_key() -> int:
+    from eth_account import Account
+
+    account = Account.create()
+    print("New anchor key. Put it in .env as PB_ANCHOR_KEY, never commit it:")
+    print(account.key.hex())
+    print(f"Address (fund it with a little testnet ETH): {account.address}")
+    return 0
+
+
 def _run(settings: Settings) -> int:
     from polybit.bot.client import PolyBitBot
 
@@ -70,8 +105,10 @@ def main(argv: list[str] | None = None) -> int:
         from polybit.wallet_cli import main as wallet_main
 
         return wallet_main(argv[1:])
+    if argv == ["anchors", "new-key"]:
+        return _new_anchor_key()
     parser = argparse.ArgumentParser(prog="polybit", description="PolyBit: Discord-native PB currency")
-    parser.add_argument("command", nargs="?", default="run", choices=["run", "migrate", "audit"])
+    parser.add_argument("command", nargs="?", default="run", choices=["run", "migrate", "audit", "anchors"])
     args = parser.parse_args(argv)
 
     load_dotenv()
@@ -91,6 +128,8 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_migrate(settings))
     if args.command == "audit":
         return asyncio.run(_audit(settings))
+    if args.command == "anchors":
+        return asyncio.run(_anchors(settings))
     return _run(settings)
 
 

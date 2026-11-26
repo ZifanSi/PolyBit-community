@@ -1,6 +1,6 @@
 # Gitleaks configuration for PolyBit.
 # Starts from the built-in rule set and adds rules for what this project handles:
-# Discord bot tokens, real Discord IDs, and database passwords.
+# Discord bot tokens, real Discord IDs, database passwords, and the anchor's EVM key.
 # Changing this file weakens or strengthens every scan: review such changes carefully.
 
 title = "PolyBit secret scanning"
@@ -38,6 +38,13 @@ tags = ["database", "password"]
 [[rules]]
 id = "polybit-env-secret"
 description = "Filled-in secret from a PolyBit .env file"
-regex = '''(?i)\b(PB_DISCORD_TOKEN|PB_DB_PASSWORD|POSTGRES_PASSWORD)\s*[=:]\s*['"]?([^\s#'"$]{6,})'''
+regex = '''(?i)\b(PB_DISCORD_TOKEN|PB_DB_PASSWORD|POSTGRES_PASSWORD|PB_ANCHOR_KEY)\s*[=:]\s*['"]?([^\s#'"$]{6,})'''
 secretGroup = 2
 tags = ["env", "password", "token"]
+
+[[rules]]
+id = "evm-private-key"
+description = "Ethereum/Base private key assigned in code or config (pays gas for anchors)"
+regex = '''(?i)(private[_-]?key|anchor[_-]?key|secret[_-]?key)['"]?\s*[=:]\s*['"]?(0x)?([0-9a-f]{64})\b'''
+secretGroup = 3
+tags = ["evm", "key"]

@@ -1,7 +1,7 @@
-"""Block explorer commands and the block sealer.
+"""Block explorer commands, the block sealer and the anchorer.
 
     /block [height]    a block's header (latest if no height)
-    /verify txid       prove a transaction is in the chain, untouched
+    /verify txid       prove a transaction is in the chain, untouched, and pinned on Base
 """
 
 from __future__ import annotations
@@ -9,11 +9,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+import aiohttp
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from polybit import chain
+from polybit import anchor, chain
 from polybit.bot import ui
 from polybit.errors import NotFound
 
@@ -37,6 +38,12 @@ def block_embed(b: chain.Block, title: str | None = None) -> discord.Embed:
     return embed
 
 
+def _anchor_line(settings, a: anchor.Anchor | None) -> str:
+    if a is None:
+        return "⏳ not anchored on Base yet"
+    return f"⚓ anchored on Base in [block #{a.height}]({anchor.tx_url(settings, a)})"
+
+
 def _mark(ok: bool) -> str:
     return "✅" if ok else "❌"
 
@@ -44,15 +51,26 @@ def _mark(ok: bool) -> str:
 class ChainCog(commands.Cog):
     def __init__(self, bot: PolyBitBot) -> None:
         self.bot = bot
+        self.anchorer: anchor.Anchorer | None = None
+        self._session: aiohttp.ClientSession | None = None
 
     async def cog_load(self) -> None:
-        minutes = self.bot.settings.block_minutes
-        if minutes > 0:
-            self.sealer.change_interval(minutes=minutes)
+        settings = self.bot.settings
+        if settings.block_minutes > 0:
+            self.sealer.change_interval(minutes=settings.block_minutes)
             self.sealer.start()
+        if settings.anchor_rpc_url and self.bot.pool is not None:
+            self._session = aiohttp.ClientSession()
+            rpc = anchor.Rpc(self._session, settings.anchor_rpc_url)
+            self.anchorer = anchor.Anchorer(self.bot.pool, settings, rpc)
+            log.info("Anchoring to chain %d from %s", settings.anchor_chain_id, self.anchorer.address)
+            self.anchor_loop.start()
 
     async def cog_unload(self) -> None:
         self.sealer.cancel()
+        self.anchor_loop.cancel()
+        if self._session is not None:
+            await self._session.close()
 
     async def on_block(self, block: chain.Block) -> None:
         """Post the new block to the announcement channel, if one is set."""
@@ -81,6 +99,15 @@ class ChainCog(commands.Cog):
     async def _wait_ready(self) -> None:
         await self.bot.wait_until_ready()
 
+    @tasks.loop(minutes=1)
+    async def anchor_loop(self) -> None:
+        try:
+            await self.anchorer.tick()
+        except anchor.RpcError as exc:
+            log.warning("Anchoring skipped: %s", exc)
+        except Exception:
+            log.exception("Anchoring failed")
+
     # ------------------------------------------------------------------ block
 
     @app_commands.command(name="block", description="Show a block of the PB chain (latest by default).")
@@ -91,7 +118,11 @@ class ChainCog(commands.Cog):
         b = await chain.get_block(self.bot.pool, height)
         if b is None:
             raise NotFound("No blocks yet." if height is None else f"Block #{height} doesn't exist yet.")
-        await interaction.response.send_message(embed=block_embed(b), ephemeral=True)
+        embed = block_embed(b)
+        if self.bot.settings.anchor_rpc_url:
+            a = await anchor.covering(self.bot.pool, b.height)
+            embed.add_field(name="Base", value=_anchor_line(self.bot.settings, a), inline=False)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     # ----------------------------------------------------------------- verify
 
@@ -107,6 +138,8 @@ class ChainCog(commands.Cog):
         else:
             lines.append(f"{_mark(v.proof_ok)} Merkle proof into block #{v.block.height} (leaf {v.position})")
             lines.append(f"{_mark(v.block_ok)} block hash and link to block #{v.block.height - 1}")
+            if self.bot.settings.anchor_rpc_url:
+                lines.append(_anchor_line(self.bot.settings, await anchor.covering(self.bot.pool, v.block.height)))
         embed = (ui.ok_embed if v.ok else ui.info_embed)(f"Transaction #{txid}", "\n".join(lines))
         embed.add_field(name="Tx hash", value=_hex(v.entry_hash), inline=False)
         if v.block is not None:

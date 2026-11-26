@@ -18,6 +18,8 @@ T = TypeVar("T")
 # Dotted Python module path, e.g. "mycompany.polybit_ext".
 MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$")
 CHAIN_ID_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
+EVM_KEY_RE = re.compile(r"^(0x)?[0-9a-fA-F]{64}$")
+BASE_SEPOLIA = 84532
 
 
 class ConfigError(ValueError):
@@ -30,6 +32,13 @@ def _int_set(raw: str) -> frozenset[int]:
 
 def _opt_int(raw: str) -> int | None:
     return int(raw) if raw.strip() else None
+
+
+def _safe_url(url: str) -> bool:
+    if url.startswith("https://"):
+        return True
+    host = url.removeprefix("http://").split("/")[0].rsplit(":", 1)[0]
+    return url.startswith("http://") and host in ("localhost", "127.0.0.1", "[::1]")
 
 
 def _str_tuple(raw: str) -> tuple[str, ...]:
@@ -75,6 +84,17 @@ class Settings:
     # one deployment can't be replayed on another. Changing it voids unsent signatures.
     chain_id: str = "polybit"
 
+    # Anchoring block hashes to a public EVM chain (polybit/anchor.py). Empty RPC = off.
+    anchor_rpc_url: str = ""
+    # Private key of the address that pays gas for anchors. Secret: .env only.
+    anchor_key: str = field(default="", repr=False)
+    anchor_chain_id: int = BASE_SEPOLIA
+    # Anchor the latest block at most this often.
+    anchor_minutes: float = 60.0
+    # Never pay more than this per gas. Anchoring waits out anything above it.
+    anchor_max_gwei: float = 2.0
+    anchor_explorer: str = "https://sepolia.basescan.org"
+
     @classmethod
     def from_env(cls) -> Settings:
         """Read settings from the environment. Raises ConfigError naming any unparsable variable."""
@@ -114,6 +134,12 @@ class Settings:
             block_channel_id=read("PB_BLOCK_CHANNEL_ID", _opt_int, d.block_channel_id),
             rate_limit_per_minute=read("PB_RATE_LIMIT_PER_MINUTE", int, d.rate_limit_per_minute),
             chain_id=env.get("PB_CHAIN_ID", d.chain_id),
+            anchor_rpc_url=env.get("PB_ANCHOR_RPC_URL", d.anchor_rpc_url).strip(),
+            anchor_key=env.get("PB_ANCHOR_KEY", d.anchor_key).strip(),
+            anchor_chain_id=read("PB_ANCHOR_CHAIN_ID", int, d.anchor_chain_id),
+            anchor_minutes=read("PB_ANCHOR_MINUTES", float, d.anchor_minutes),
+            anchor_max_gwei=read("PB_ANCHOR_MAX_GWEI", float, d.anchor_max_gwei),
+            anchor_explorer=env.get("PB_ANCHOR_EXPLORER", d.anchor_explorer).strip(),
         )
         if problems:
             raise ConfigError("; ".join(problems))
@@ -146,6 +172,13 @@ class Settings:
         check(self.block_minutes >= 0, "PB_BLOCK_MINUTES can't be negative")
         check(self.rate_limit_per_minute >= 0, "PB_RATE_LIMIT_PER_MINUTE can't be negative")
         check(bool(CHAIN_ID_RE.match(self.chain_id)), "PB_CHAIN_ID must be 1-32 of a-z 0-9 - _")
+        if self.anchor_rpc_url:
+            check(_safe_url(self.anchor_rpc_url), "PB_ANCHOR_RPC_URL must be https (or http on localhost)")
+            check(bool(EVM_KEY_RE.match(self.anchor_key)), "PB_ANCHOR_KEY must be a 32-byte hex private key")
+            check(self.anchor_chain_id > 0, "PB_ANCHOR_CHAIN_ID must be above 0")
+            check(self.anchor_minutes > 0, "PB_ANCHOR_MINUTES must be above 0")
+            check(self.anchor_max_gwei > 0, "PB_ANCHOR_MAX_GWEI must be above 0")
+            check(self.anchor_explorer.startswith("https://"), "PB_ANCHOR_EXPLORER must be https")
 
         if problems:
             raise ConfigError("; ".join(problems))

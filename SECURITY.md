@@ -29,7 +29,8 @@ Everything is **fail-closed**: if a check fails or can't run, the commit/push is
 
 - Discord bot tokens, real Discord user/server IDs (17–20 digit snowflakes)
 - Database passwords, including passwords inside connection strings
-- Filled-in `PB_DISCORD_TOKEN`, `PB_DB_PASSWORD`, `POSTGRES_PASSWORD` values
+- Filled-in `PB_DISCORD_TOKEN`, `PB_DB_PASSWORD`, `POSTGRES_PASSWORD`, `PB_ANCHOR_KEY` values
+- EVM private keys assigned in code or config
 - Everything in gitleaks' default rule set (API keys, private keys, cloud credentials …)
 - Sensitive files: `.env*`, `.devdb/`, `rules/`, keys and
   certificates, database dumps and backups, `*.log`, compose override files
@@ -64,6 +65,7 @@ Always use `--redact` so secret values never appear in your terminal or logs.
 2. Rotate it immediately:
    - Discord token: Developer Portal → your app → Bot → **Reset Token**
    - Database: change the PostgreSQL password and update `.env`
+   - Anchor key: `polybit anchors new-key`, move any leftover ETH, update `.env`
 3. Deleting the file in a new commit does **not** remove the secret from history.
    History is only rewritten with the owner's explicit approval.
 
@@ -72,6 +74,8 @@ Always use `--redact` so secret values never appear in your terminal or logs.
 - Secrets live only in `.env` (local) or your host's secret store (production).
 - Tests use synthetic data: small fake IDs like `1`, `2`, `3`, never real Discord IDs.
 - Use a separate bot token and database for development and production.
+- The anchor key only pays gas: keep just enough testnet ETH on it. Fees are capped by
+  `PB_ANCHOR_MAX_GWEI`, and the bot refuses to sign if the RPC reports another chain.
 - Self-custody wallet keys (`~/.polybit/wallet.key`) belong to users and never touch the
   server. Only the signed `pb1.` token is sent.
 - Don't paste `.env` contents, tokens or logs with IDs into issues or chat.
